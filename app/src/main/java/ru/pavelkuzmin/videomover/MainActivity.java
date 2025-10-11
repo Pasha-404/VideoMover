@@ -1,14 +1,11 @@
 package ru.pavelkuzmin.videomover;
 
 import android.Manifest;
-import android.content.ContentResolver;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.DocumentsContract;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -24,23 +21,27 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
 
-    // SAF: выбор дерева каталогов (папки назначения на флэшке)
-    private final ActivityResultLauncher<Uri> openTreeLauncher =
-            registerForActivityResult(new ActivityResultContracts.OpenDocumentTree(), uri -> {
-                if (uri == null) return;
-                // Просим персистентные разрешения на чтение/запись этой папки
-                final int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION;
+    // SAF через явный Intent, чтобы получить реальные флаги из результата
+    private final ActivityResultLauncher<Intent> openTreeLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
 
+                Intent data = result.getData();
+                Uri treeUri = data.getData();
+                if (treeUri == null) return;
+
+// Берём persistable-доступ явно для READ и для WRITE
                 try {
-                    getContentResolver().takePersistableUriPermission(uri, flags);
+                    getContentResolver().takePersistableUriPermission(
+                            treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    getContentResolver().takePersistableUriPermission(
+                            treeUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 } catch (SecurityException e) {
                     Toast.makeText(this, "Не удалось сохранить доступ к папке", Toast.LENGTH_LONG).show();
                     return;
                 }
 
-                DestStore.save(this, uri);
+                DestStore.save(this, treeUri);
                 updateDestUi();
                 Toast.makeText(this, "Папка назначения выбрана", Toast.LENGTH_SHORT).show();
             });
@@ -61,27 +62,34 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // Кнопки
         binding.btnChooseDest.setOnClickListener(v -> openDestTree());
         binding.btnTransfer.setOnClickListener(v -> {
-            // Пока заглушка — просто проверяем, что папка выбрана и есть разрешение на видео
             if (!ensureVideoPermission()) return;
             Uri dest = DestStore.get(this);
             if (dest == null) {
                 Toast.makeText(this, "Сначала выберите папку назначения", Toast.LENGTH_SHORT).show();
                 return;
             }
+            // Пока заглушка — в следующих шагах сюда добавим перенос
             Toast.makeText(this, "Ок, дальше будем переносить видео…", Toast.LENGTH_SHORT).show();
         });
 
         updateDestUi();
-        ensureVideoPermission(); // запросим сразу, если нужно
+        ensureVideoPermission(); // Запросим на старте, если нужно
     }
 
     private void openDestTree() {
-        // Можно подсказать стартовую директорию, если хотим (не обязательно)
-        // openTreeLauncher.launch(Uri.parse("content://com.android.externalstorage.documents/document/primary%3A"));
-        openTreeLauncher.launch(null);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        // Попросим возможность выдать нам постоянный доступ, плюс R/W на время выбора:
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+
+        // Можно подсказать стартовую директорию, но не обязательно.
+        // intent.putExtra("android.provider.extra.SHOW_ADVANCED", true);
+
+        openTreeLauncher.launch(intent);
     }
 
     private boolean ensureVideoPermission() {
