@@ -1,0 +1,34 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local configuration
+local.properties
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# APK / AAB outputs
+*.apk
+*.aab
+outputs/
+
+# Keystores (никогда не добавлять в git)
+*.jks
+*.keystore
+
+# Misc
+captures/
+.externalNativeBuild/
+.cxx/

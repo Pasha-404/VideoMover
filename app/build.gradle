@@ -1,0 +1,51 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+android {
+    namespace 'ru.pavelkuzmin.videomover'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "ru.pavelkuzmin.videomover"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // <-- ВКЛЮЧАЕМ ViewBinding
+    buildFeatures {
+        viewBinding true
+    }
+
+    // Java 17
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation libs.appcompat
+    implementation libs.material
+    implementation libs.activity
+    implementation libs.constraintlayout
+
+    // Добавим документ-файл (для работы с SAF/USB later).
+    // Если в каталоге версий нет алиаса — можно временно так:
+    implementation "androidx.documentfile:documentfile:1.0.1"
+
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
