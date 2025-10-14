@@ -13,9 +13,12 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.documentfile.provider.DocumentFile;
 
 import ru.pavelkuzmin.videomover.data.DestStore;
 import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
+import ru.pavelkuzmin.videomover.data.MediaQuery;
+import ru.pavelkuzmin.videomover.domain.FileCopier;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -65,13 +68,48 @@ public class MainActivity extends AppCompatActivity {
         binding.btnChooseDest.setOnClickListener(v -> openDestTree());
         binding.btnTransfer.setOnClickListener(v -> {
             if (!ensureVideoPermission()) return;
-            Uri dest = DestStore.get(this);
-            if (dest == null) {
+
+            Uri destTree = DestStore.get(this);
+            if (destTree == null) {
                 Toast.makeText(this, "Сначала выберите папку назначения", Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Пока заглушка — в следующих шагах сюда добавим перенос
-            Toast.makeText(this, "Ок, дальше будем переносить видео…", Toast.LENGTH_SHORT).show();
+            DocumentFile destDir = DocumentFile.fromTreeUri(this, destTree);
+            if (destDir == null || !destDir.canWrite()) {
+                Toast.makeText(this, "Нет доступа на запись к выбранной папке", Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            // Асинхронно, чтобы не блокировать UI
+            new Thread(() -> {
+                try {
+                    // 1) Найдём первое видео из камерных папок
+                    var items = MediaQuery.findCameraVideos(this, 1);
+                    if (items.isEmpty()) {
+                        runOnUiThread(() -> Toast.makeText(this, "Видео в камерных папках не найдено", Toast.LENGTH_LONG).show());
+                        return;
+                    }
+                    var vitem = items.get(0);
+
+                    // 2) Скопируем файл с .partial и SHA-256
+                    var res = FileCopier.copyWithSha256(this, vitem.uri(), vitem.displayName, vitem.size, destDir);
+
+                    // 3) Сообщим результат
+                    runOnUiThread(() -> {
+                        if (res.ok) {
+                            Toast.makeText(this,
+                                    "Скопировано: " + res.finalName + "\n" +
+                                            "Размер: " + (res.bytes / (1024 * 1024)) + " МБ\n" +
+                                            "SHA-256: " + res.sha256.substring(0, 8) + "…",
+                                    Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(this, "Ошибка копирования: " + res.error, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }).start();
         });
 
         updateDestUi();
