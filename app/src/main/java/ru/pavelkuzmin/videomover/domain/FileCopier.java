@@ -32,7 +32,6 @@ public class FileCopier {
         try {
             // Разрулим коллизию имён для финального файла (finalName)
             String base = displayName;
-            String name = base;
             String ext = "";
             int dot = base.lastIndexOf('.');
             if (dot > 0 && dot < base.length()-1) {

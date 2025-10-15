@@ -11,7 +11,7 @@
         android:id="@+id/tvDest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Папка назначения: не выбрана"
+        android:text="@string/dest_not_selected"
         android:textSize="16sp"
         android:gravity="center"
         android:paddingBottom="24dp" />
@@ -20,7 +20,7 @@
         android:id="@+id/btnChooseDest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Выбрать папку на флэшке"
+        android:text="@string/choose_dest"
         android:padding="12dp" />
 
     <View
@@ -31,8 +31,18 @@
         android:id="@+id/btnTransfer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Перенести видео"
+        android:text="@string/transfer"
         android:padding="12dp"
         android:enabled="false" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="24dp" />
+
+    <Button
+        android:id="@+id/btnSettings"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/settings" />
 
 </LinearLayout>

@@ -1,3 +1,23 @@
 <resources>
     <string name="app_name">VideoMover</string>
+
+    <!-- Main -->
+    <string name="dest_not_selected">Папка назначения: не выбрана</string>
+    <string name="choose_dest">Выбрать папку на флэшке</string>
+    <string name="transfer">Перенести видео</string>
+    <string name="settings">Настройки</string>
+
+    <!-- Settings -->
+    <string name="pref_title">Настройки</string>
+    <string name="pref_category_io">Пути</string>
+    <string name="pref_dest_title">Папка назначения (SAF)</string>
+    <string name="pref_dest_summary">Текущая: %1$s</string>
+    <string name="pref_source_title">Источник (RELATIVE_PATH)</string>
+    <string name="pref_source_summary">Текущая: %1$s</string>
+    <string name="pref_detect_source_title">Определить источник автоматически</string>
+    <string name="pref_detect_source_summary">Найдём типичную камерную папку (DCIM/Camera и т.п.)</string>
+
+    <string name="pref_category_behavior">Поведение</string>
+    <string name="pref_delete_after_title">Удалять исходники после копирования</string>
+    <string name="pref_delete_after_summary">По умолчанию ВКЛ — перенос, а не просто копия</string>
 </resources>

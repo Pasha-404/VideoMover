@@ -44,6 +44,7 @@ dependencies {
     // Добавим документ-файл (для работы с SAF/USB later).
     // Если в каталоге версий нет алиаса — можно временно так:
     implementation "androidx.documentfile:documentfile:1.0.1"
+    implementation "androidx.preference:preference:1.2.1"
 
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
