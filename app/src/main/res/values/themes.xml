@@ -4,6 +4,9 @@
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
     </style>
-
+    <!-- ОТДЕЛЬНАЯ тема только для экрана настроек с ActionBar -->
+    <style name="Theme.VideoMover.Settings" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <!-- Можно не задавать цвета: возьмёт дефолтные -->
+    </style>
     <style name="Theme.VideoMover" parent="Base.Theme.VideoMover" />
 </resources>
