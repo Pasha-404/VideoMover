@@ -35,6 +35,15 @@
         android:padding="12dp"
         android:enabled="false" />
 
+    <!-- Пусто до старта -->
+    <TextView
+        android:id="@+id/tvProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:gravity="center"
+        android:paddingTop="16dp"
+        android:textSize="14sp" />
     <View
         android:layout_width="match_parent"
         android:layout_height="24dp" />

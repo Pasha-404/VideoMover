@@ -15,6 +15,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import ru.pavelkuzmin.videomover.data.MediaQuery;
 import ru.pavelkuzmin.videomover.data.SettingsStore;
 import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
@@ -24,17 +27,13 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
 
-    // SAF через явный Intent, чтобы гарантированно получить persistable-доступ
     private final ActivityResultLauncher<Intent> openTreeLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
-
                 Intent data = result.getData();
                 Uri treeUri = data.getData();
                 if (treeUri == null) return;
-
                 try {
-                    // Берём persistable-доступ явно и для READ, и для WRITE
                     getContentResolver().takePersistableUriPermission(
                             treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     getContentResolver().takePersistableUriPermission(
@@ -43,13 +42,11 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "Не удалось сохранить доступ к папке", Toast.LENGTH_LONG).show();
                     return;
                 }
-
                 SettingsStore.setDestTreeUri(this, treeUri);
                 updateDestUi();
                 Toast.makeText(this, "Папка назначения выбрана", Toast.LENGTH_SHORT).show();
             });
 
-    // Разрешение на чтение видео (Android 13+)
     private final ActivityResultLauncher<String> videoPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (!granted) {
@@ -65,9 +62,8 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // Кнопки
         binding.btnChooseDest.setOnClickListener(v -> openDestTree());
-        binding.btnTransfer.setOnClickListener(v -> onTransferClick());
+        binding.btnTransfer.setOnClickListener(v -> onTransferAll());
         binding.btnSettings.setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
 
@@ -105,6 +101,7 @@ public class MainActivity extends AppCompatActivity {
             binding.tvDest.setText("Папка назначения:\n" + uri);
             binding.btnTransfer.setEnabled(true);
         }
+        binding.tvProgress.setText("");
     }
 
     private void maybeAutodetectSourceOnFirstRun() {
@@ -118,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void onTransferClick() {
+    private void onTransferAll() {
         if (!ensureVideoPermission()) return;
 
         Uri destTree = SettingsStore.getDestTreeUri(this);
@@ -132,33 +129,61 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        binding.btnTransfer.setEnabled(false);
+        binding.btnChooseDest.setEnabled(false);
+        binding.btnSettings.setEnabled(false);
+        binding.tvProgress.setText("Готовим список файлов…");
+
         new Thread(() -> {
             try {
                 String relPrefix = SettingsStore.getSourceRelPath(this);
-                var items = MediaQuery.findCameraVideos(this, 1, relPrefix);
-                if (items.isEmpty()) {
-                    runOnUiThread(() -> Toast.makeText(this,
-                            (relPrefix == null || relPrefix.isEmpty())
-                                    ? "Источник не задан. Укажите в Настройках."
-                                    : "Видео не найдено в источнике: " + relPrefix,
-                            Toast.LENGTH_LONG).show());
+                List<MediaQuery.VideoItem> items = MediaQuery.findCameraVideosList(this, relPrefix);
+                int total = items.size();
+                if (total == 0) {
+                    runOnUiThread(() -> {
+                        binding.tvProgress.setText("");
+                        Toast.makeText(this,
+                                (relPrefix == null || relPrefix.isEmpty())
+                                        ? "Источник не задан. Укажите в Настройках."
+                                        : "Видео не найдено в источнике: " + relPrefix,
+                                Toast.LENGTH_LONG).show();
+                        binding.btnTransfer.setEnabled(true);
+                        binding.btnChooseDest.setEnabled(true);
+                        binding.btnSettings.setEnabled(true);
+                    });
                     return;
                 }
-                var vitem = items.get(0);
 
-                var res = FileCopier.copyWithSha256(this, vitem.uri(), vitem.displayName, vitem.size, destDir);
+                AtomicInteger done = new AtomicInteger(0);
+                AtomicInteger ok = new AtomicInteger(0);
+                AtomicInteger fail = new AtomicInteger(0);
+
+                for (MediaQuery.VideoItem vitem : items) {
+                    var res = FileCopier.copyWithSha256(this, vitem.uri(), vitem.displayName, vitem.size, destDir);
+                    if (res.ok) ok.incrementAndGet(); else fail.incrementAndGet();
+                    int d = done.incrementAndGet();
+                    final String msg = "Перенесено " + d + " из " + total
+                            + (fail.get() > 0 ? (" (ошибок: " + fail.get() + ")") : "");
+                    runOnUiThread(() -> binding.tvProgress.setText(msg));
+                }
 
                 runOnUiThread(() -> {
-                    if (res.ok) {
-                        Toast.makeText(this,
-                                "Скопировано: " + res.finalName + "\nИз: " + (vitem.relativePath == null ? "" : vitem.relativePath),
-                                Toast.LENGTH_LONG).show();
-                    } else {
-                        Toast.makeText(this, "Ошибка копирования: " + res.error, Toast.LENGTH_LONG).show();
-                    }
+                    String fin = "Готово: " + ok.get() + " из " + total
+                            + (fail.get() > 0 ? (" с ошибками: " + fail.get()) : "");
+                    Toast.makeText(this, fin, Toast.LENGTH_LONG).show();
+                    binding.btnTransfer.setEnabled(true);
+                    binding.btnChooseDest.setEnabled(true);
+                    binding.btnSettings.setEnabled(true);
                 });
+
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> {
+                    binding.tvProgress.setText("");
+                    Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    binding.btnTransfer.setEnabled(true);
+                    binding.btnChooseDest.setEnabled(true);
+                    binding.btnSettings.setEnabled(true);
+                });
             }
         }).start();
     }

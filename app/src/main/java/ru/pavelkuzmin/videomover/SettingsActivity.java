@@ -3,20 +3,21 @@ package ru.pavelkuzmin.videomover;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.MenuItem;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.documentfile.provider.DocumentFile;
 import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.SwitchPreferenceCompat;
 
-import ru.pavelkuzmin.videomover.data.SettingsStore;
 import ru.pavelkuzmin.videomover.data.MediaQuery;
+import ru.pavelkuzmin.videomover.data.SettingsStore;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -27,6 +28,19 @@ public class SettingsActivity extends AppCompatActivity {
                 .replace(android.R.id.content, new SettingsFragment())
                 .commit();
         setTitle(getString(R.string.pref_title));
+
+        // Включаем «стрелку назад» в ActionBar
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        }
+    }
+
+    @Override public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            finish(); // назад на главный экран
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     public static class SettingsFragment extends PreferenceFragmentCompat {
@@ -42,7 +56,6 @@ public class SettingsActivity extends AppCompatActivity {
                     Uri uri = data.getData();
                     if (uri == null) return;
 
-                    final int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                     try {
                         requireContext().getContentResolver().takePersistableUriPermission(
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -114,6 +127,18 @@ public class SettingsActivity extends AppCompatActivity {
             if (destPref == null) return;
             Uri u = SettingsStore.getDestTreeUri(requireContext());
             destPref.setSummary(getString(R.string.pref_dest_summary, u == null ? "не выбрана" : u.toString()));
+        }
+
+        @Override
+        public void onViewCreated(android.view.View view, @Nullable Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+            // Сдвигаем список префов вниз, чтобы визуально было ближе к центру
+            int topPaddingDp = 48; // можно настроить
+            int px = (int) TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, topPaddingDp, getResources().getDisplayMetrics());
+            getListView().setPadding(getListView().getPaddingLeft(), px,
+                    getListView().getPaddingRight(), getListView().getPaddingBottom());
+            getListView().setClipToPadding(false);
         }
     }
 }
