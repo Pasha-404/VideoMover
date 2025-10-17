@@ -20,4 +20,14 @@
     <string name="pref_category_behavior">Поведение</string>
     <string name="pref_delete_after_title">Удалять исходники после копирования</string>
     <string name="pref_delete_after_summary">По умолчанию ВКЛ — перенос, а не просто копия</string>
+    <!-- Source picking -->
+    <string name="pref_source_pick_list_title">Выбрать источник из списка</string>
+    <string name="pref_source_pick_list_summary">Покажем найденные «камерные» папки</string>
+    <string name="pref_source_pick_video_title">Определить источник по видео</string>
+    <string name="pref_source_pick_video_summary">Выберите любой ролик из нужной папки</string>
+
+    <string name="dialog_source_title">Выберите папку-источник</string>
+    <string name="dialog_source_empty">Камерных папок не нашли. Попробуйте вариант «по видео».</string>
+    <string name="toast_source_set">Источник установлен: %1$s</string>
+
 </resources>

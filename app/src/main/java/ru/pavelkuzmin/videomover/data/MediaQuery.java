@@ -134,4 +134,62 @@ public class MediaQuery {
         }
         return out;
     }
+    // Статистика по путям
+    public static class PathStat {
+        public final String relPath;
+        public final int count;
+        public PathStat(String relPath, int count) { this.relPath = relPath; this.count = count; }
+    }
+
+    /** Возвращает до maxPaths наиболее частые RELATIVE_PATH с приоритетом DCIM/камеры. */
+    public static List<PathStat> listLikelyCameraRelPaths(Context ctx, int maxPaths) {
+        ContentResolver cr = ctx.getContentResolver();
+        String[] projection = { MediaStore.Video.Media.RELATIVE_PATH };
+        String order = MediaStore.Video.Media.DATE_TAKEN + " DESC";
+
+        Map<String, Integer> freq = new HashMap<>();
+        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, order)) {
+            if (c == null) return new ArrayList<>();
+            int iPath = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+            int scanned = 0;
+            while (c.moveToNext() && scanned < 500) { // достаточно 500 последних
+                String rel = safe(c.getString(iPath));
+                if (rel.isEmpty()) { scanned++; continue; }
+                // отсекаем явные мессенджеры
+                if (rel.contains("WhatsApp") || rel.contains("Telegram") ||
+                        rel.contains("Download") || rel.contains("/Android/media/")) {
+                    scanned++; continue;
+                }
+                freq.put(rel, freq.getOrDefault(rel, 0) + 1);
+                scanned++;
+            }
+        }
+        // отсортируем: сначала содержащие DCIM/Camera, затем по убыванию частоты
+        List<PathStat> all = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : freq.entrySet()) {
+            all.add(new PathStat(e.getKey(), e.getValue()));
+        }
+        all.sort((a,b) -> {
+            boolean ac = a.relPath.contains("DCIM");
+            boolean bc = b.relPath.contains("DCIM");
+            if (ac != bc) return bc ? 1 : -1; // DCIM выше
+            return Integer.compare(b.count, a.count);
+        });
+        if (all.size() > maxPaths) return new ArrayList<>(all.subList(0, maxPaths));
+        return all;
+    }
+
+    /** Берём RELATIVE_PATH для конкретного content:Uri видео (после ACTION_OPEN_DOCUMENT). */
+    public static @Nullable String getRelativePathForVideoUri(Context ctx, Uri videoUri) {
+        ContentResolver cr = ctx.getContentResolver();
+        String[] projection = { MediaStore.Video.Media.RELATIVE_PATH };
+        try (Cursor c = cr.query(videoUri, projection, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int i = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+                return safe(c.getString(i));
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
 }

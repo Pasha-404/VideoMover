@@ -14,10 +14,23 @@
             android:title="@string/pref_detect_source_title"
             android:summary="@string/pref_detect_source_summary" />
 
+        <!-- 🔽 новые пункты для ручного выбора источника -->
+        <Preference
+            android:key="pref_source_pick_list"
+            android:title="@string/pref_source_pick_list_title"
+            android:summary="@string/pref_source_pick_list_summary" />
+
+        <Preference
+            android:key="pref_source_pick_video"
+            android:title="@string/pref_source_pick_video_title"
+            android:summary="@string/pref_source_pick_video_summary" />
+        <!-- 🔼 конец новых пунктов -->
+
         <EditTextPreference
             android:key="pref_source_relpath"
             android:title="@string/pref_source_title"
             app:useSimpleSummaryProvider="true" />
+
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/pref_category_behavior">
