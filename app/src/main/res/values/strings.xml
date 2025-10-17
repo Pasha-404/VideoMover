@@ -30,4 +30,10 @@
     <string name="dialog_source_empty">Камерных папок не нашли. Попробуйте вариант «по видео».</string>
     <string name="toast_source_set">Источник установлен: %1$s</string>
 
+    <string name="deleting_request_title">Удаление исходников</string>
+    <string name="deleting_request_started">Запрос на удаление отправлен…</string>
+    <string name="deleting_done">Удаление завершено</string>
+    <string name="deleting_canceled">Удаление отменено</string>
+    <string name="deleting_nothing">Нечего удалять</string>
+
 </resources>
