@@ -12,6 +12,7 @@ import android.os.IBinder;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 
 import java.util.ArrayList;
@@ -47,19 +48,28 @@ public class CopyService extends Service {
     public void onCreate() {
         super.onCreate();
         nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        createChannel();
+        createChannel(); // minSdk=26, канал обязателен — создаём без условий
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
         if (intent == null || !ACTION_START.equals(intent.getAction())) {
             stopSelf();
             return START_NOT_STICKY;
         }
 
+        // Android 13+ — без разрешения на уведомления сервис не должен постить уведомления
+        if (Build.VERSION.SDK_INT >= 33) {
+            int s = ContextCompat.checkSelfPermission(
+                    this, android.Manifest.permission.POST_NOTIFICATIONS);
+            if (s != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+        }
+
         String destUriStr = intent.getStringExtra(EXTRA_DEST_URI);
         String relPrefix = intent.getStringExtra(EXTRA_REL_PREFIX);
-
         if (destUriStr == null) {
             stopSelf();
             return START_NOT_STICKY;
@@ -73,10 +83,13 @@ public class CopyService extends Service {
         }
 
         // Стартовое уведомление
-        Notification startNotif = buildNotification(getString(R.string.notif_title), getString(R.string.notif_copy_in_progress, 0, 0), 0, 0, true);
+        Notification startNotif = buildNotification(
+                getString(R.string.notif_title),
+                getString(R.string.notif_copy_in_progress, 0, 0),
+                0, 0, true, true
+        );
         startForeground(NOTIF_ID, startNotif);
 
-        // Работаем в фоне
         new Thread(() -> {
             List<MediaQuery.VideoItem> items = MediaQuery.findCameraVideosList(this, relPrefix);
             int total = items.size();
@@ -84,7 +97,6 @@ public class CopyService extends Service {
             AtomicInteger done = new AtomicInteger(0);
             AtomicInteger ok = new AtomicInteger(0);
             AtomicInteger fail = new AtomicInteger(0);
-
             ArrayList<String> toDelete = new ArrayList<>();
 
             for (MediaQuery.VideoItem vitem : items) {
@@ -98,11 +110,11 @@ public class CopyService extends Service {
                 int d = done.incrementAndGet();
 
                 // Обновляем уведомление
-                Notification n = buildNotification(
+                nm.notify(NOTIF_ID, buildNotification(
                         getString(R.string.notif_title),
                         getString(R.string.notif_copy_in_progress, d, total),
-                        d, total, true);
-                nm.notify(NOTIF_ID, n);
+                        d, total, false, true
+                ));
 
                 // Шлём прогресс в Activity
                 Intent progress = new Intent(ACTION_PROGRESS);
@@ -114,12 +126,12 @@ public class CopyService extends Service {
                 sendBroadcast(progress);
             }
 
-            // Финал
-            Notification doneNotif = buildNotification(
+            // Финал: уведомление и широковещалка с результатом
+            nm.notify(NOTIF_ID, buildNotification(
                     getString(R.string.notif_title),
                     getString(R.string.notif_copy_done),
-                    total, total, false);
-            nm.notify(NOTIF_ID, doneNotif);
+                    total, total, false, false
+            ));
 
             Intent doneIntent = new Intent(ACTION_DONE);
             doneIntent.setPackage(getPackageName());
@@ -137,29 +149,31 @@ public class CopyService extends Service {
     }
 
     private void createChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch = new NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.notif_channel_name),
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            nm.createNotificationChannel(ch);
-        }
+        NotificationChannel ch = new NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.notif_channel_name),
+                NotificationManager.IMPORTANCE_LOW
+        );
+        nm.createNotificationChannel(ch);
     }
 
-    private Notification buildNotification(String title, String text, int progress, int max, boolean indeterminate) {
+    /**
+     * @param indeterminate true — крутилка без прогресса, false — шкала с progress/max
+     * @param ongoing true — уведомление «не свайпается» во время копирования
+     */
+    private Notification buildNotification(String title, String text, int progress, int max, boolean indeterminate, boolean ongoing) {
         // Нажатие по уведомлению откроет MainActivity
         Intent i = new Intent(this, MainActivity.class);
         int flags = Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0;
         PendingIntent pi = PendingIntent.getActivity(this, 0, i, flags);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_notification) // добавь любой 24px иконку в mipmap/drawable
+                .setSmallIcon(R.mipmap.ic_launcher) // можно заменить на R.drawable.ic_notification
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(pi)
                 .setOnlyAlertOnce(true)
-                .setOngoing(true)
+                .setOngoing(ongoing)
                 .setPriority(NotificationCompat.PRIORITY_LOW);
 
         if (max > 0) {
@@ -170,5 +184,9 @@ public class CopyService extends Service {
         return b.build();
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent) { return null; }
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null; // не привязываемся
+    }
 }
