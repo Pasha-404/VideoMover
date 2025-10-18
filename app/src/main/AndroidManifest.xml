@@ -2,7 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Разрешения -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="true"
@@ -12,14 +16,23 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.VideoMover">
+        android:theme="@style/Theme.VideoMover"
+        tools:targetApi="33">
 
+        <!-- Foreground Service для копирования -->
+        <service
+            android:name=".service.CopyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Экран настроек -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.VideoMover.Settings" />
 
+        <!-- Главная активити -->
         <activity
             android:name=".MainActivity"
             android:exported="true">

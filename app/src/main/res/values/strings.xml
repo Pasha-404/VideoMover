@@ -36,4 +36,9 @@
     <string name="deleting_canceled">Удаление отменено</string>
     <string name="deleting_nothing">Нечего удалять</string>
 
+    <string name="notif_channel_name">Копирование видео</string>
+    <string name="notif_title">Перенос видео</string>
+    <string name="notif_copy_in_progress">Копирование… %1$d из %2$d</string>
+    <string name="notif_copy_done">Копирование завершено</string>
+
 </resources>
