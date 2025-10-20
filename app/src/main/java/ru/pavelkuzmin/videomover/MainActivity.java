@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import ru.pavelkuzmin.videomover.data.SettingsStore;
 import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
 import ru.pavelkuzmin.videomover.service.CopyService;
+import ru.pavelkuzmin.videomover.util.StorageUtil;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -210,7 +211,12 @@ public class MainActivity extends AppCompatActivity {
             binding.tvDest.setText(getString(R.string.dest_not_selected));
             binding.btnTransfer.setEnabled(false);
         } else {
-            binding.tvDest.setText("Папка назначения:\n" + uri);
+            // было:
+            // binding.tvDest.setText("Папка назначения:\n" + uri);
+
+            // стало: дружелюбный вывод
+            String pretty = StorageUtil.buildDestSummary(this, uri);
+            binding.tvDest.setText(pretty);
             binding.btnTransfer.setEnabled(true);
         }
         binding.tvProgress.setText("");
