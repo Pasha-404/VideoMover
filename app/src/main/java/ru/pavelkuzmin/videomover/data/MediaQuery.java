@@ -1,195 +1,142 @@
 package ru.pavelkuzmin.videomover.data;
 
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.MediaStore;
 
-import androidx.annotation.Nullable;
-
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Утилиты для получения списка видеороликов с устройства.
+ * Работает с MediaStore и поддерживает два режима:
+ *  1) Поиск видео в конкретной подпапке камеры (RELATIVE_PATH)
+ *  2) Поиск всех видео в DCIM/*
+ */
 public class MediaQuery {
 
+    /** Обёртка данных о видео */
     public static class VideoItem {
-        public final long id;
+        public final Uri uri;
         public final String displayName;
         public final long size;
-        public final String relativePath;
+        public final String relPath;
 
-        public VideoItem(long id, String displayName, long size, String relativePath) {
-            this.id = id;
+        public VideoItem(Uri uri, String displayName, long size, String relPath) {
+            this.uri = uri;
             this.displayName = displayName;
             this.size = size;
-            this.relativePath = relativePath;
-        }
-
-        public Uri uri() {
-            return Uri.withAppendedPath(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, String.valueOf(id));
+            this.relPath = relPath;
         }
     }
 
-    private static String safe(String s) { return s == null ? "" : s; }
-
-    /** Базовая версия (до N шт.). */
-    public static List<VideoItem> findCameraVideos(Context ctx, int limit) {
-        return query(ctx, limit, null);
+    /** Безопасно возвращает строку (не null) */
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 
-    /** С фильтром по RELATIVE_PATH prefix (если задан). */
-    public static List<VideoItem> findCameraVideos(Context ctx, int limit, @Nullable String relPrefix) {
-        return query(ctx, limit, relPrefix);
-    }
-
-    /** Все видео из источника (или из типичных камерных путей, если источник не задан). */
-    public static List<VideoItem> findCameraVideosList(Context ctx, @Nullable String relPrefix) {
-        return query(ctx, Integer.MAX_VALUE, relPrefix);
-    }
-
-    /** Находит самый вероятный RELATIVE_PATH камерной папки по последним 50 видео. */
-    public static @Nullable String detectLikelyCameraRelPath(Context ctx) {
+    /**
+     * Находит видео, снятые камерой телефона (по пути RELATIVE_PATH).
+     * Обычно это DCIM/Camera или DCIM/100MEDIA и т.п.
+     */
+    public static List<VideoItem> findCameraVideosList(Context ctx, String relPrefix) {
         ContentResolver cr = ctx.getContentResolver();
         String[] projection = {
-                MediaStore.Video.Media.RELATIVE_PATH,
-                MediaStore.Video.Media.DATE_TAKEN
-        };
-        String order = MediaStore.Video.Media.DATE_TAKEN + " DESC";
-
-        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, order)) {
-            if (c == null) return null;
-            Map<String, Integer> freq = new HashMap<>();
-            int iPath = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
-            int count = 0;
-            while (c.moveToNext() && count < 50) {
-                String rel = safe(c.getString(iPath));
-                if (rel.contains("DCIM")) {
-                    freq.put(rel, freq.getOrDefault(rel, 0) + 1);
-                }
-                count++;
-            }
-            String best = null; int bestN = 0;
-            for (Map.Entry<String, Integer> e : freq.entrySet()) {
-                if (e.getValue() > bestN) { bestN = e.getValue(); best = e.getKey(); }
-            }
-            return best; // может быть null
-        }
-    }
-
-    private static List<VideoItem> query(Context ctx, int limit, @Nullable String relPrefix) {
-        ContentResolver cr = ctx.getContentResolver();
-        List<VideoItem> out = new ArrayList<>();
-
-        String[] projection = new String[] {
                 MediaStore.Video.Media._ID,
                 MediaStore.Video.Media.DISPLAY_NAME,
                 MediaStore.Video.Media.SIZE,
                 MediaStore.Video.Media.RELATIVE_PATH
         };
 
-        String selection;
-        String[] args;
+        String sel = MediaStore.Video.Media.RELATIVE_PATH + " LIKE ?";
+        String[] selArgs = new String[]{ relPrefix + "%" };
+        String order = MediaStore.Video.Media.DATE_TAKEN + " DESC";
 
-        if (relPrefix != null && !relPrefix.isEmpty()) {
-            selection = MediaStore.Video.Media.RELATIVE_PATH + " LIKE ?";
-            args = new String[] { relPrefix + "%" };
-        } else {
-            // Типичные камеры
-            String camLike = "DCIM/%Camera%";
-            String moviesCamLike = "Movies/%Camera%";
-            selection =
-                    MediaStore.Video.Media.RELATIVE_PATH + " LIKE ? OR " +
-                            MediaStore.Video.Media.RELATIVE_PATH + " LIKE ? OR " +
-                            MediaStore.Video.Media.BUCKET_DISPLAY_NAME + " = ?";
-            args = new String[] { camLike, moviesCamLike, "Camera" };
-        }
-
-        String sort = MediaStore.Video.Media.DATE_TAKEN + " DESC";
-
-        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                projection, selection, args, sort)) {
+        List<VideoItem> out = new ArrayList<>();
+        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, sel, selArgs, order)) {
             if (c == null) return out;
             int iId = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID);
             int iName = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME);
             int iSize = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE);
-            int iPath = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
-
-            while (c.moveToNext() && out.size() < limit) {
-                String rel = safe(c.getString(iPath));
-                // фильтр «без мессенджеров»
-                if (rel.contains("WhatsApp") || rel.contains("Telegram") ||
-                        rel.contains("Download") || rel.contains("/Android/media/")) {
-                    continue;
-                }
-                out.add(new VideoItem(
-                        c.getLong(iId),
-                        safe(c.getString(iName)),
-                        c.getLong(iSize),
-                        rel
-                ));
+            int iRel  = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+            while (c.moveToNext()) {
+                String rel = safe(c.getString(iRel));
+                long id = c.getLong(iId);
+                Uri uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id);
+                String name = c.getString(iName);
+                long size = c.getLong(iSize);
+                out.add(new VideoItem(uri, name, size, rel));
             }
         }
         return out;
     }
-    // Статистика по путям
-    public static class PathStat {
-        public final String relPath;
-        public final int count;
-        public PathStat(String relPath, int count) { this.relPath = relPath; this.count = count; }
+
+    /**
+     * Новый режим: берёт ВСЕ видео в DCIM и его подпапках
+     * (включая DCIM/Camera, DCIM/DJI Album и т.д.)
+     */
+    public static List<VideoItem> findDcimVideosList(Context ctx) {
+        ContentResolver cr = ctx.getContentResolver();
+        String[] projection = {
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.DISPLAY_NAME,
+                MediaStore.Video.Media.SIZE,
+                MediaStore.Video.Media.RELATIVE_PATH
+        };
+
+        String sel = MediaStore.Video.Media.RELATIVE_PATH + " LIKE ?";
+        String[] selArgs = new String[]{"DCIM/%"};
+        String order = MediaStore.Video.Media.DATE_TAKEN + " DESC";
+
+        List<VideoItem> out = new ArrayList<>();
+        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, sel, selArgs, order)) {
+            if (c == null) return out;
+            int iId = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID);
+            int iName = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME);
+            int iSize = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE);
+            int iRel  = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+            while (c.moveToNext()) {
+                String rel = safe(c.getString(iRel));
+                // На всякий случай отфильтруем явные мессенджеры
+                if (rel.contains("WhatsApp") || rel.contains("Telegram") || rel.contains("Instagram"))
+                    continue;
+
+                long id = c.getLong(iId);
+                Uri uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id);
+                String name = c.getString(iName);
+                long size = c.getLong(iSize);
+                out.add(new VideoItem(uri, name, size, rel));
+            }
+        }
+        return out;
     }
 
-    /** Возвращает до maxPaths наиболее частые RELATIVE_PATH с приоритетом DCIM/камеры. */
-    public static List<PathStat> listLikelyCameraRelPaths(Context ctx, int maxPaths) {
+    /**
+     * Пробует автоматически определить путь к папке камеры.
+     * Возвращает строку вроде "DCIM/Camera/" или "DCIM/100MEDIA/"
+     */
+    public static String detectLikelyCameraRelPath(Context ctx) {
         ContentResolver cr = ctx.getContentResolver();
         String[] projection = { MediaStore.Video.Media.RELATIVE_PATH };
         String order = MediaStore.Video.Media.DATE_TAKEN + " DESC";
 
-        Map<String, Integer> freq = new HashMap<>();
-        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, order)) {
-            if (c == null) return new ArrayList<>();
-            int iPath = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
-            int scanned = 0;
-            while (c.moveToNext() && scanned < 500) { // достаточно 500 последних
-                String rel = safe(c.getString(iPath));
-                if (rel.isEmpty()) { scanned++; continue; }
-                // отсекаем явные мессенджеры
-                if (rel.contains("WhatsApp") || rel.contains("Telegram") ||
-                        rel.contains("Download") || rel.contains("/Android/media/")) {
-                    scanned++; continue;
+        try (Cursor c = cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection,
+                null, null, order + " LIMIT 20")) {
+            if (c == null) return null;
+            int iRel = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
+            while (c.moveToNext()) {
+                String rel = safe(c.getString(iRel));
+                if (rel.startsWith("DCIM/Camera")
+                        || rel.startsWith("DCIM/100MEDIA")
+                        || rel.startsWith("DCIM/OpenCamera")
+                        || rel.startsWith("DCIM/Photos")) {
+                    return rel;
                 }
-                freq.put(rel, freq.getOrDefault(rel, 0) + 1);
-                scanned++;
-            }
-        }
-        // отсортируем: сначала содержащие DCIM/Camera, затем по убыванию частоты
-        List<PathStat> all = new ArrayList<>();
-        for (Map.Entry<String, Integer> e : freq.entrySet()) {
-            all.add(new PathStat(e.getKey(), e.getValue()));
-        }
-        all.sort((a,b) -> {
-            boolean ac = a.relPath.contains("DCIM");
-            boolean bc = b.relPath.contains("DCIM");
-            if (ac != bc) return bc ? 1 : -1; // DCIM выше
-            return Integer.compare(b.count, a.count);
-        });
-        if (all.size() > maxPaths) return new ArrayList<>(all.subList(0, maxPaths));
-        return all;
-    }
-
-    /** Берём RELATIVE_PATH для конкретного content:Uri видео (после ACTION_OPEN_DOCUMENT). */
-    public static @Nullable String getRelativePathForVideoUri(Context ctx, Uri videoUri) {
-        ContentResolver cr = ctx.getContentResolver();
-        String[] projection = { MediaStore.Video.Media.RELATIVE_PATH };
-        try (Cursor c = cr.query(videoUri, projection, null, null, null)) {
-            if (c != null && c.moveToFirst()) {
-                int i = c.getColumnIndexOrThrow(MediaStore.Video.Media.RELATIVE_PATH);
-                return safe(c.getString(i));
             }
         } catch (Exception ignore) {}
         return null;
     }
-
 }

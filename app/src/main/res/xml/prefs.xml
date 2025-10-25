@@ -2,37 +2,48 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Ввод/вывод -->
     <PreferenceCategory android:title="@string/pref_category_io">
 
+        <!-- Назначение: выбор папки на внешнем накопителе (SAF) -->
         <Preference
             android:key="pref_dest"
             android:title="@string/pref_dest_title"
             android:summary="@string/pref_dest_summary" />
 
+        <!-- Режим: брать все видео из DCIM/* -->
+        <SwitchPreferenceCompat
+            android:key="pref_use_dcim_all"
+            android:title="@string/pref_use_dcim_all_title"
+            android:summary="@string/pref_use_dcim_all_summary"
+            android:defaultValue="false" />
+
+        <!-- Автоопределение источника камеры -->
         <Preference
             android:key="pref_source_detect"
             android:title="@string/pref_detect_source_title"
             android:summary="@string/pref_detect_source_summary" />
 
-        <!-- 🔽 новые пункты для ручного выбора источника -->
+        <!-- Выбор источника из списка найденных путей -->
         <Preference
             android:key="pref_source_pick_list"
             android:title="@string/pref_source_pick_list_title"
             android:summary="@string/pref_source_pick_list_summary" />
 
+        <!-- Выбор видео → взять его RELATIVE_PATH как источник -->
         <Preference
             android:key="pref_source_pick_video"
             android:title="@string/pref_source_pick_video_title"
             android:summary="@string/pref_source_pick_video_summary" />
-        <!-- 🔼 конец новых пунктов -->
 
+        <!-- Ручной ввод RELATIVE_PATH (используем SummaryProvider) -->
         <EditTextPreference
             android:key="pref_source_relpath"
             android:title="@string/pref_source_title"
             app:useSimpleSummaryProvider="true" />
-
     </PreferenceCategory>
 
+    <!-- Поведение -->
     <PreferenceCategory android:title="@string/pref_category_behavior">
         <SwitchPreferenceCompat
             android:key="pref_delete_after"

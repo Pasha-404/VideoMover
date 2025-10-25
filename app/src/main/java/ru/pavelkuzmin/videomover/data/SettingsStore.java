@@ -39,4 +39,13 @@ public class SettingsStore {
     public static void setDeleteAfter(Context ctx, boolean value) {
         sp(ctx).edit().putBoolean(KEY_DELETE_AFTER, value).apply();
     }
+
+    public static boolean isUseDcimAll(Context ctx) {
+        return androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+                .getBoolean("pref_use_dcim_all", false);
+    }
+    public static void setUseDcimAll(Context ctx, boolean v) {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+                .edit().putBoolean("pref_use_dcim_all", v).apply();
+    }
 }

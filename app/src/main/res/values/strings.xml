@@ -43,4 +43,7 @@
     <string name="progress_ok">Перенесено %1$d из %2$d</string>
     <string name="progress_with_errors">Перенесено %1$d из %2$d (ошибок: %3$d)</string>
 
+    <string name="pref_use_dcim_all_title">Брать все видео из DCIM</string>
+    <string name="pref_use_dcim_all_summary">Искать видео во всех подпапках DCIM (включая сторонние камеры: DJI и т.п.)</string>
+
 </resources>

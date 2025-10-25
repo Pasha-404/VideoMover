@@ -2,11 +2,11 @@ package ru.pavelkuzmin.videomover;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.Context;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Папка назначения выбрана", Toast.LENGTH_SHORT).show();
             });
 
-    // === Разрешения: видео (Android 13+) ===
+    // === Разрешение: доступ к видео (Android 13+) ===
     private final ActivityResultLauncher<String> videoPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (!granted) {
@@ -63,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-    // === Разрешения: уведомления (Android 13+) ===
+    // === Разрешение: уведомления (Android 13+) ===
     private final ActivityResultLauncher<String> notifPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (!granted) {
@@ -83,7 +83,7 @@ public class MainActivity extends AppCompatActivity {
 
     // === Broadcasts from CopyService ===
     private final BroadcastReceiver progressReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(android.content.Context context, Intent intent) {
+        @Override public void onReceive(Context context, Intent intent) {
             int done = intent.getIntExtra(CopyService.EXTRA_DONE, 0);
             int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
             int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
@@ -96,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private final BroadcastReceiver doneReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(android.content.Context context, Intent intent) {
+        @Override public void onReceive(Context context, Intent intent) {
             int ok = intent.getIntExtra(CopyService.EXTRA_OK, 0);
             int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
             int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
@@ -122,6 +122,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.makeText(MainActivity.this, "Не удалось запросить удаление: " + e.getMessage(), Toast.LENGTH_LONG).show();
                     }
                 } else {
+                    // до Android 11 диалог не обязателен
                     for (Uri u : toDelete) {
                         try { getContentResolver().delete(u, null, null); } catch (Exception ignore) {}
                     }
@@ -152,17 +153,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        // Регистрируем ресиверы на время видимости Activity
-        registerReceiver(
-                progressReceiver,
+        // Регистрируем ресиверы на время видимости Activity (API 34+ требуют явного флага)
+        registerReceiver(progressReceiver,
                 new IntentFilter(CopyService.ACTION_PROGRESS),
-                Context.RECEIVER_NOT_EXPORTED
-        );
-        registerReceiver(
-                doneReceiver,
+                Context.RECEIVER_NOT_EXPORTED);
+        registerReceiver(doneReceiver,
                 new IntentFilter(CopyService.ACTION_DONE),
-                Context.RECEIVER_NOT_EXPORTED
-        );
+                Context.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
@@ -211,10 +208,6 @@ public class MainActivity extends AppCompatActivity {
             binding.tvDest.setText(getString(R.string.dest_not_selected));
             binding.btnTransfer.setEnabled(false);
         } else {
-            // было:
-            // binding.tvDest.setText("Папка назначения:\n" + uri);
-
-            // стало: дружелюбный вывод
             String pretty = StorageUtil.buildDestSummary(this, uri);
             binding.tvDest.setText(pretty);
             binding.btnTransfer.setEnabled(true);
@@ -247,23 +240,31 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Android 13+: попросим разрешение на уведомления, прежде чем запускать сервис
+        // Android 13+: уведомления перед запуском Foreground Service
         if (!ensureNotificationPermission()) {
-            // пользователь увидит системный диалог; перенос можно запустить повторно
+            // пользователь увидит системный диалог; запустит перенос повторно
             return;
         }
 
         lockUiForCopy();
 
+        // Режим источника
+        boolean useDcimAll = SettingsStore.isUseDcimAll(this);
+
         // Стартуем Foreground Service
         Intent svc = new Intent(this, CopyService.class);
         svc.setAction(CopyService.ACTION_START);
         svc.putExtra(CopyService.EXTRA_DEST_URI, destTree.toString());
-        String rel = SettingsStore.getSourceRelPath(this);
-        if (rel != null) svc.putExtra(CopyService.EXTRA_REL_PREFIX, rel);
+        svc.putExtra(CopyService.EXTRA_USE_DCIM_ALL, useDcimAll);
+
+        if (!useDcimAll) {
+            // В обычном режиме передаём конкретный RELATIVE_PATH
+            String rel = SettingsStore.getSourceRelPath(this);
+            if (rel != null) svc.putExtra(CopyService.EXTRA_REL_PREFIX, rel);
+        }
 
         ContextCompat.startForegroundService(this, svc);
-        binding.tvProgress.setText(getString(R.string.progress_ok, 0, 0)); // краткий стартовый текст
+        binding.tvProgress.setText(getString(R.string.progress_ok, 0, 0)); // стартовая строка
     }
 
     private void lockUiForCopy() {
