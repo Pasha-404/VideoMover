@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- I/O -->
+    <PreferenceCategory android:title="@string/pref_category_io">
+
+        <Preference
+            android:key="pref_dest"
+            android:title="@string/pref_dest_title"
+            android:summary="@string/pref_dest_summary" />
+
+        <SwitchPreferenceCompat
+            android:key="pref_use_dcim_all"
+            android:title="@string/pref_use_dcim_all_title"
+            android:summary="@string/pref_use_dcim_all_summary"
+            android:defaultValue="true" />
+
+        <Preference
+            android:key="pref_source_detect"
+            android:title="@string/pref_detect_source_title"
+            android:summary="@string/pref_detect_source_summary" />
+
+        <Preference
+            android:key="pref_source_pick_list"
+            android:title="@string/pref_source_pick_list_title"
+            android:summary="@string/pref_source_pick_list_summary" />
+
+        <Preference
+            android:key="pref_source_pick_video"
+            android:title="@string/pref_source_pick_video_title"
+            android:summary="@string/pref_source_pick_video_summary" />
+
+        <EditTextPreference
+            android:key="pref_source_relpath"
+            android:title="@string/pref_source_title"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <!-- Behavior -->
+    <PreferenceCategory android:title="@string/pref_category_behavior">
+        <SwitchPreferenceCompat
+            android:key="pref_delete_after"
+            android:title="@string/pref_delete_after_title"
+            android:summary="@string/pref_delete_after_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+    <!-- General -->
+    <PreferenceCategory android:title="@string/pref_category_general">
+        <ListPreference
+            android:key="pref_language"
+            android:title="@string/pref_language_title"
+            android:summary="@string/pref_language_summary"
+            android:entries="@array/lang_entries"
+            android:entryValues="@array/lang_values"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

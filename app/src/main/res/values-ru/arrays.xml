@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Порядок совпадает с values -->
+    <string-array name="lang_entries">
+        <item>Системный</item>
+        <item>Английский</item>
+        <item>Русский</item>
+    </string-array>
+    <string-array name="lang_values">
+        <item></item>
+        <item>en</item>
+        <item>ru</item>
+    </string-array>
+</resources>
