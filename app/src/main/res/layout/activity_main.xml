@@ -14,7 +14,7 @@
         style="?attr/materialButtonOutlinedStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="20dp"
+        android:layout_marginBottom="60dp"
         android:text="@string/settings"
         android:textAllCaps="false"
         app:layout_constraintBottom_toBottomOf="parent"

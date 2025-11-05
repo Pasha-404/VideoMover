@@ -37,22 +37,24 @@ public class SettingsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        // Тема для настроек задана в манифесте: @style/Theme.VideoMover.Settings (Material3)
         super.onCreate(savedInstanceState);
         setContentView(R.layout.settings_activity);
 
-        // Toolbar, язык НЕ трогаем
+        // Toolbar как ActionBar
         com.google.android.material.appbar.MaterialToolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        toolbar.setNavigationIcon(R.drawable.ic_arrow_back_24);
-        toolbar.setNavigationOnClickListener(v -> finish());
 
-        ActionBar ab = getSupportActionBar();
+        // Заголовок и "вверх" через ActionBar + свой индикатор
+        androidx.appcompat.app.ActionBar ab = getSupportActionBar();
         if (ab != null) {
             ab.setTitle(R.string.settings);
-            ab.setDisplayHomeAsUpEnabled(true);
+            ab.setDisplayHomeAsUpEnabled(true);       // показать кнопку "вверх"
             ab.setHomeButtonEnabled(true);
+            ab.setHomeAsUpIndicator(R.drawable.ic_arrow_back_24); // наша стрелка
         }
+
+        // На всякий случай: клик по стрелке сразу закрывает экран
+        toolbar.setNavigationOnClickListener(v -> finish());
 
         if (savedInstanceState == null) {
             getSupportFragmentManager()

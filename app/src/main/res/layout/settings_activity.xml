@@ -4,7 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
 
     <!-- Отдельный Toolbar с ЯВНОЙ иконкой "назад" и её тинтом -->
     <com.google.android.material.appbar.MaterialToolbar
@@ -13,7 +14,6 @@
         android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorSurface"
         android:elevation="4dp"
-        android:fitsSystemWindows="true"
         app:title="@string/settings"
         app:titleCentered="false"
         app:navigationIcon="@drawable/ic_arrow_back_24"
@@ -25,4 +25,5 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="?attr/actionBarSize" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
