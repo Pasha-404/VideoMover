@@ -10,12 +10,10 @@
     <string name="settings">Settings</string>
 
     <!-- Settings screen (sections & fields) -->
-    <string name="pref_title">Settings</string>
     <string name="pref_category_io">Paths</string>
     <string name="pref_dest_title">Destination folder (SAF)</string>
     <string name="pref_dest_summary">Current: %1$s</string>
     <string name="pref_source_title">Source</string>
-    <string name="pref_source_summary">Current: %1$s</string>
     <string name="pref_detect_source_title">Detect source automatically</string>
     <string name="pref_detect_source_summary">Find a typical camera folder (DCIM/Camera, etc.)</string>
 
@@ -29,16 +27,10 @@
     <string name="pref_source_pick_video_summary">Pick any clip from the desired folder</string>
 
     <!-- Dialogs / toasts / notifications -->
-    <string name="dialog_source_title">Select source folder</string>
-    <string name="dialog_source_empty">No camera folders found. Try the "by video" option.</string>
     <string name="toast_source_set">Source set: %1$s</string>
 
-    <string name="deleting_request_title">Deleting originals</string>
-    <string name="deleting_request_started">Delete request sent…</string>
     <string name="deleting_done">Deleting finished</string>
-    <string name="deleting_failed">Delete failed</string>
     <string name="deleting_canceled">Delete canceled</string>
-    <string name="deleting_nothing">Nothing to delete</string>
 
     <string name="notif_channel_name">Video copy</string>
     <string name="notif_title">Moving videos</string>
@@ -55,9 +47,6 @@
     <string name="pref_category_general">General</string>
     <string name="pref_language_title">App language</string>
     <string name="pref_language_summary">Current: %1$s</string>
-    <string name="lang_system">System default</string>
-    <string name="lang_en">English</string>
-    <string name="lang_ru">Russian</string>
 
     <!-- Permissions / hints / errors -->
     <string name="toast_dest_persist_failed">Failed to persist folder access</string>
@@ -81,11 +70,9 @@
     <!-- Main screen -->
     <string name="main_title">Move videos to external storage</string>
     <string name="main_dest_label">Destination folder</string>
-    <string name="main_source_label">Source folder</string>
-    <string name="main_pick_dest">Choose destination</string>
-    <string name="main_pick_source">Choose source</string>
-    <string name="main_start">Start</string>
-    <string name="main_cancel">Cancel</string>
-    <string name="main_detect_source">Detect camera folder</string>
-    <string name="main_not_set">Not set</string>
+
+    <string name="filecopier_err_stream_access">Cannot access stream</string>
+    <string name="filecopier_err_size_mismatch">Size mismatch</string>
+    <string name="filecopier_err_rename_failed">Failed to rename file</string>
+
 </resources>

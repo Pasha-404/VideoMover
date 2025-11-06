@@ -10,12 +10,10 @@
     <string name="settings">Настройки</string>
 
     <!-- Экран настроек (секции и поля) -->
-    <string name="pref_title">Настройки</string>
     <string name="pref_category_io">Пути</string>
     <string name="pref_dest_title">Папка назначения (SAF)</string>
     <string name="pref_dest_summary">Текущая: %1$s</string>
     <string name="pref_source_title">Источник</string>
-    <string name="pref_source_summary">Текущая: %1$s</string>
     <string name="pref_detect_source_title">Определить источник автоматически</string>
     <string name="pref_detect_source_summary">Найдём типичную камерную папку (DCIM/Camera и т.п.)</string>
 
@@ -29,16 +27,10 @@
     <string name="pref_source_pick_video_summary">Выберите любой ролик из нужной папки</string>
 
     <!-- Диалоги / тосты / уведомления -->
-    <string name="dialog_source_title">Выберите папку источника</string>
-    <string name="dialog_source_empty">Камерных папок не найдено. Попробуйте «по видео».</string>
     <string name="toast_source_set">Источник: %1$s</string>
 
-    <string name="deleting_request_title">Удаление оригиналов</string>
-    <string name="deleting_request_started">Запрос на удаление отправлен…</string>
     <string name="deleting_done">Удаление завершено</string>
-    <string name="deleting_failed">Удаление не удалось</string>
     <string name="deleting_canceled">Удаление отменено</string>
-    <string name="deleting_nothing">Нечего удалять</string>
 
     <string name="notif_channel_name">Копирование видео</string>
     <string name="notif_title">Перенос видео</string>
@@ -55,9 +47,6 @@
     <string name="pref_category_general">Общие</string>
     <string name="pref_language_title">Язык приложения</string>
     <string name="pref_language_summary">Текущий: %1$s</string>
-    <string name="lang_system">Системный</string>
-    <string name="lang_en">Английский</string>
-    <string name="lang_ru">Русский</string>
 
     <!-- Разрешения / подсказки / ошибки -->
     <string name="toast_dest_persist_failed">Не удалось сохранить доступ к папке</string>
@@ -81,11 +70,9 @@
     <!-- Главный экран -->
     <string name="main_title">Перенос видео на внешний накопитель</string>
     <string name="main_dest_label">Папка назначения</string>
-    <string name="main_source_label">Источник</string>
-    <string name="main_pick_dest">Выбрать папку назначения</string>
-    <string name="main_pick_source">Выбрать источник</string>
-    <string name="main_start">Старт</string>
-    <string name="main_cancel">Отмена</string>
-    <string name="main_detect_source">Определить папку камеры</string>
-    <string name="main_not_set">Не задано</string>
+
+    <string name="filecopier_err_stream_access">Нет доступа к потоку</string>
+    <string name="filecopier_err_size_mismatch">Размер не совпал</string>
+    <string name="filecopier_err_rename_failed">Не удалось переименовать файл</string>
+
 </resources>

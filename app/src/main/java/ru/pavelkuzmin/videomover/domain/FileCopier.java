@@ -54,8 +54,7 @@ public class FileCopier {
 
             try (InputStream in = cr.openInputStream(srcUri);
                  OutputStream out = cr.openOutputStream(tempUri)) {
-                if (in == null || out == null) return new Result(false, null, 0, null, "Нет доступа к потоку");
-
+                if (in == null || out == null) return new Result(false, null, 0, null, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_stream_access));
                 int read;
                 while ((read = in.read(buf)) != -1) {
                     md.update(buf, 0, read);
@@ -68,7 +67,7 @@ public class FileCopier {
             if (expectedSize > 0 && written != expectedSize) {
                 // Размер не совпал — удаляем temp и выходим
                 DocumentsContract.deleteDocument(cr, tempUri);
-                return new Result(false, null, written, null, "Размер не совпал");
+                return new Result(false, null, written, null, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_size_mismatch));
             }
 
             String hash = HashUtil.toHex(md.digest());
@@ -77,7 +76,7 @@ public class FileCopier {
             Uri renamed = DocumentsContract.renameDocument(cr, tempUri, finalName);
             if (renamed == null) {
                 DocumentsContract.deleteDocument(cr, tempUri);
-                return new Result(false, null, written, hash, "Не удалось переименовать файл");
+                return new Result(false, null, written, hash, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_rename_failed));
             }
 
             return new Result(true, finalName, written, hash, null);
