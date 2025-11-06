@@ -11,7 +11,7 @@ Instant language switch (EN default, RU), auto-detects `DCIM/Camera`, optional d
 - 🧹 Optional delete-after-copy
 
 ## ✅ Requirements
-- Android **minSdk**: _fill in your value_ (e.g., 24+)
+- Android **minSdk**: 26 (Android 8.0, Oreo)
 - Ensure enough free space at the destination
 
 ## 🔧 Installation
