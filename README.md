@@ -65,9 +65,3 @@ Instant language switch (EN default, RU), auto-detects `DCIM/Camera`, optional d
 - Describe the issue and reproduction steps
 - Feature ideas and small mockups are welcome
 
-## 📄 License
-*(fill in if applicable)*
-
-## 📬 Contact
-- Author: *fill in name/email/social*
-- Repository: GitHub repo link
