@@ -58,7 +58,7 @@
 
     <string name="dest_summary_label">Внешний накопитель: %1$s\nПапка: %2$s</string>
     <string name="dest_summary_no_label">Папка назначения:\n%1$s\n(%2$s)</string>
-    <string name="dest_summary_no_access">%1$s\nНет доступа на запись. Выберите папку заново.</string>
+    <string name="dest_summary_no_access">Нет доступа на запись. Выберите папку назначения заново.</string>
 
     <string name="source_detected">Источник определён: %1$s</string>
     <string name="source_detect_failed">Не удалось определить источник автоматически</string>

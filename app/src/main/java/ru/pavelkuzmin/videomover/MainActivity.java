@@ -275,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
         boolean writable = SafUtil.hasPersistedWritePermission(this, uri) && SafUtil.canWriteTree(this, uri);
         binding.tvDest.setText(writable
                 ? summary
-                : getString(R.string.dest_summary_no_access, summary));
+                : getString(R.string.dest_summary_no_access));
         binding.btnTransfer.setEnabled(writable);
         binding.tvStorageStatus.setBackgroundResource(writable
                 ? R.drawable.bg_status_ready

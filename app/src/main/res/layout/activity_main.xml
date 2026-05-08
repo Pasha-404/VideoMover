@@ -15,9 +15,9 @@
         android:layout_height="0dp"
         android:clipToPadding="false"
         android:fillViewport="true"
-        android:paddingHorizontal="22dp"
-        android:paddingTop="34dp"
-        android:paddingBottom="20dp"
+        android:paddingHorizontal="18dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="10dp"
         app:layout_constraintBottom_toTopOf="@id/btnSettings"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -32,46 +32,50 @@
 
             <ImageView
                 android:id="@+id/ivAppIcon"
-                android:layout_width="88dp"
-                android:layout_height="88dp"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:contentDescription="@string/app_name"
-                android:src="@mipmap/ic_launcher" />
+                android:src="@mipmap/ic_launcher"
+                android:visibility="gone"
+                tools:visibility="visible" />
 
             <TextView
                 android:id="@+id/tvTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
                 android:gravity="center"
                 android:includeFontPadding="false"
+                android:maxLines="1"
                 android:text="@string/app_name"
-                android:textAppearance="?attr/textAppearanceDisplaySmall"
                 android:textColor="@color/vm_text"
-                android:textStyle="bold" />
+                android:textSize="34sp"
+                android:textStyle="bold"
+                tools:layout_marginTop="10dp" />
 
             <TextView
                 android:id="@+id/tvSubtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="6dp"
                 android:gravity="center"
+                android:maxLines="2"
                 android:text="@string/main_title"
-                android:textAppearance="?attr/textAppearanceBodyLarge"
-                android:textColor="@color/vm_text_muted" />
+                android:textColor="@color/vm_text_muted"
+                android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/tvStorageStatus"
                 android:layout_width="wrap_content"
-                android:layout_height="44dp"
-                android:layout_marginTop="24dp"
+                android:layout_height="38dp"
+                android:layout_marginTop="14dp"
                 android:background="@drawable/bg_status_missing"
-                android:drawablePadding="10dp"
+                android:drawablePadding="8dp"
                 android:gravity="center"
-                android:minWidth="220dp"
-                android:paddingHorizontal="18dp"
+                android:minWidth="188dp"
+                android:paddingHorizontal="14dp"
                 android:text="@string/main_usb_missing"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:textColor="@color/vm_text"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 app:drawableStartCompat="@drawable/ic_usb_24" />
 
@@ -79,7 +83,7 @@
                 android:id="@+id/cardDest"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="30dp"
+                android:layout_marginTop="16dp"
                 app:cardBackgroundColor="@color/vm_surface"
                 app:cardCornerRadius="18dp"
                 app:cardElevation="0dp"
@@ -90,7 +94,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="14dp">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -99,13 +103,13 @@
                         android:orientation="horizontal">
 
                         <FrameLayout
-                            android:layout_width="58dp"
-                            android:layout_height="58dp"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
                             android:background="@drawable/bg_icon_surface">
 
                             <ImageView
-                                android:layout_width="30dp"
-                                android:layout_height="30dp"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
                                 android:layout_gravity="center"
                                 android:contentDescription="@null"
                                 android:src="@drawable/ic_folder_24" />
@@ -115,17 +119,18 @@
                             android:id="@+id/tvDestHeader"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
+                            android:layout_marginStart="12dp"
                             android:layout_weight="1"
+                            android:maxLines="1"
                             android:text="@string/main_dest_label"
-                            android:textAppearance="?attr/textAppearanceTitleLarge"
                             android:textColor="@color/vm_text"
+                            android:textSize="24sp"
                             android:textStyle="bold" />
 
                         <ImageView
                             android:id="@+id/ivDestCheck"
-                            android:layout_width="34dp"
-                            android:layout_height="34dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:contentDescription="@null"
                             android:src="@drawable/ic_check_24" />
                     </LinearLayout>
@@ -133,18 +138,20 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:layout_marginTop="18dp"
+                        android:layout_marginTop="12dp"
                         android:background="@color/vm_outline" />
 
                     <TextView
                         android:id="@+id/tvDest"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
-                        android:lineSpacingExtra="4dp"
+                        android:layout_marginTop="12dp"
+                        android:ellipsize="end"
+                        android:lineSpacingExtra="1dp"
+                        android:maxLines="4"
                         android:text="@string/dest_not_selected"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
                         android:textColor="@color/vm_text_muted"
+                        android:textSize="16sp"
                         tools:text="External storage: USB Drive\nFolder: /Movies" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -153,12 +160,12 @@
                 android:id="@+id/btnChooseDest"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:layout_marginTop="26dp"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
                 android:text="@string/choose_dest"
                 android:textAllCaps="false"
                 android:textColor="@color/vm_primary"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 app:cornerRadius="18dp"
                 app:icon="@drawable/ic_folder_24"
                 app:iconGravity="textStart"
@@ -170,13 +177,13 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnTransfer"
                 android:layout_width="match_parent"
-                android:layout_height="64dp"
-                android:layout_marginTop="14dp"
+                android:layout_height="56dp"
+                android:layout_marginTop="10dp"
                 android:enabled="false"
                 android:text="@string/transfer"
                 android:textAllCaps="false"
                 android:textColor="@color/vm_on_primary"
-                android:textSize="17sp"
+                android:textSize="16sp"
                 android:textStyle="bold"
                 app:backgroundTint="@color/vm_primary_deep"
                 app:cornerRadius="20dp"
@@ -189,10 +196,10 @@
                 android:id="@+id/tvProgress"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center"
-                android:lineSpacingExtra="3dp"
-                android:minHeight="44dp"
+                android:lineSpacingExtra="1dp"
+                android:minHeight="28dp"
                 android:textColor="@color/vm_text_muted"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 tools:text="Moved 3 of 10\nVID_20260508.mp4: 120 MB / 840 MB" />
@@ -203,13 +210,13 @@
         android:id="@+id/btnSettings"
         style="?attr/materialButtonOutlinedStyle"
         android:layout_width="wrap_content"
-        android:layout_height="54dp"
-        android:layout_marginBottom="28dp"
-        android:minWidth="190dp"
+        android:layout_height="48dp"
+        android:layout_marginBottom="14dp"
+        android:minWidth="176dp"
         android:text="@string/settings"
         android:textAllCaps="false"
         android:textColor="@color/vm_text"
-        app:cornerRadius="27dp"
+        app:cornerRadius="24dp"
         app:icon="@drawable/ic_settings_24"
         app:iconGravity="textStart"
         app:iconPadding="10dp"

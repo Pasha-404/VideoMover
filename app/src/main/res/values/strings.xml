@@ -58,7 +58,7 @@
 
     <string name="dest_summary_label">External storage: %1$s\nFolder: %2$s</string>
     <string name="dest_summary_no_label">Destination folder:\n%1$s\n(%2$s)</string>
-    <string name="dest_summary_no_access">%1$s\nNo write access. Choose the folder again.</string>
+    <string name="dest_summary_no_access">No write access. Choose the destination folder again.</string>
 
     <string name="source_detected">Source detected: %1$s</string>
     <string name="source_detect_failed">Failed to detect source automatically</string>
