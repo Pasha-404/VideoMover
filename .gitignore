@@ -28,6 +28,7 @@ app/release/
 # Keystores (никогда не добавлять в git)
 *.jks
 *.keystore
+Keys/
 
 # Misc
 captures/
