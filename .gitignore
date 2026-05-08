@@ -23,6 +23,7 @@ Thumbs.db
 *.apk
 *.aab
 outputs/
+app/release/
 
 # Keystores (никогда не добавлять в git)
 *.jks
@@ -30,5 +31,6 @@ outputs/
 
 # Misc
 captures/
+.serena/
 .externalNativeBuild/
 .cxx/
