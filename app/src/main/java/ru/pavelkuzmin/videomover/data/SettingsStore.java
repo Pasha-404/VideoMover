@@ -9,7 +9,11 @@ public class SettingsStore {
 
     private static final String KEY_DEST_URI = "dest_tree_uri";
     private static final String KEY_SOURCE_REL_PATH = "source_rel_path";
-    private static final String KEY_DELETE_AFTER = "delete_after"; // default true
+    private static final String KEY_DELETE_AFTER = "delete_after";
+    private static final String KEY_USE_DCIM_ALL = "pref_use_dcim_all";
+
+    public static final boolean DEFAULT_DELETE_AFTER = true;
+    public static final boolean DEFAULT_USE_DCIM_ALL = true;
 
     private static SharedPreferences sp(Context ctx) {
         return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -34,7 +38,7 @@ public class SettingsStore {
 
     // Delete after copy
     public static boolean isDeleteAfter(Context ctx) {
-        return sp(ctx).getBoolean(KEY_DELETE_AFTER, true);
+        return sp(ctx).getBoolean(KEY_DELETE_AFTER, DEFAULT_DELETE_AFTER);
     }
     public static void setDeleteAfter(Context ctx, boolean value) {
         sp(ctx).edit().putBoolean(KEY_DELETE_AFTER, value).apply();
@@ -42,10 +46,10 @@ public class SettingsStore {
 
     public static boolean isUseDcimAll(Context ctx) {
         return androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
-                .getBoolean("pref_use_dcim_all", false);
+                .getBoolean(KEY_USE_DCIM_ALL, DEFAULT_USE_DCIM_ALL);
     }
     public static void setUseDcimAll(Context ctx, boolean v) {
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
-                .edit().putBoolean("pref_use_dcim_all", v).apply();
+                .edit().putBoolean(KEY_USE_DCIM_ALL, v).apply();
     }
 }

@@ -5,6 +5,7 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/bg_app_background"
     android:fitsSystemWindows="true">
 
     <!-- Отдельный Toolbar с ЯВНОЙ иконкой "назад" и её тинтом -->
@@ -12,12 +13,13 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorSurface"
+        android:background="@color/vm_bg"
         android:elevation="4dp"
         app:title="@string/settings"
+        app:titleTextColor="@color/vm_text"
         app:titleCentered="false"
         app:navigationIcon="@drawable/ic_arrow_back_24"
-        app:navigationIconTint="?attr/colorOnSurface" />
+        app:navigationIconTint="@color/vm_text" />
 
     <!-- Сохраняем ваш контейнер с тем же id -->
     <FrameLayout

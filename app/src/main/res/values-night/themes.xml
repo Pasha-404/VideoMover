@@ -1,7 +1,16 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.VideoMover" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.VideoMover" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/vm_bg_deep</item>
+        <item name="android:windowBackground">@color/vm_bg</item>
+        <item name="colorPrimary">@color/vm_primary</item>
+        <item name="colorOnPrimary">@color/vm_on_primary</item>
+        <item name="colorSurface">@color/vm_bg</item>
+        <item name="colorOnSurface">@color/vm_text</item>
+        <item name="colorOnSurfaceVariant">@color/vm_text_muted</item>
+        <item name="colorOutline">@color/vm_outline</item>
     </style>
 </resources>

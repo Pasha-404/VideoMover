@@ -1,32 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Приложение -->
     <string name="app_name">VideoMover</string>
 
-    <!-- Главный экран -->
     <string name="dest_not_selected">Папка назначения: не выбрана</string>
-    <string name="choose_dest">Выбрать папку на флэшке</string>
+    <string name="choose_dest">Выбрать папку на флешке</string>
     <string name="transfer">Перенести видео</string>
     <string name="settings">Настройки</string>
 
-    <!-- Экран настроек (секции и поля) -->
     <string name="pref_category_io">Пути</string>
-    <string name="pref_dest_title">Папка назначения (SAF)</string>
+    <string name="pref_dest_title">Папка назначения</string>
     <string name="pref_dest_summary">Текущая: %1$s</string>
-    <string name="pref_source_title">Источник</string>
+    <string name="pref_source_title">Папка источника</string>
     <string name="pref_detect_source_title">Определить источник автоматически</string>
-    <string name="pref_detect_source_summary">Найдём типичную камерную папку (DCIM/Camera и т.п.)</string>
+    <string name="pref_detect_source_summary">Найти типичную папку камеры, например DCIM/Camera</string>
 
     <string name="pref_category_behavior">Поведение</string>
     <string name="pref_delete_after_title">Удалять оригиналы после копирования</string>
-    <string name="pref_delete_after_summary">Включено по умолчанию — это перенос, а не просто копия</string>
+    <string name="pref_delete_after_summary">Включено по умолчанию: это перенос, а не просто копия</string>
 
     <string name="pref_source_pick_list_title">Выбрать источник из списка</string>
-    <string name="pref_source_pick_list_summary">Показать найденные «камерные» папки</string>
+    <string name="pref_source_pick_list_summary">Показать найденные папки камер</string>
     <string name="pref_source_pick_video_title">Определить источник по видео</string>
     <string name="pref_source_pick_video_summary">Выберите любой ролик из нужной папки</string>
 
-    <!-- Диалоги / тосты / уведомления -->
     <string name="toast_source_set">Источник: %1$s</string>
 
     <string name="deleting_done">Удаление завершено</string>
@@ -34,45 +30,49 @@
 
     <string name="notif_channel_name">Копирование видео</string>
     <string name="notif_title">Перенос видео</string>
-    <string name="notif_copy_in_progress">Копирование… %1$d из %2$d</string>
+    <string name="notif_copy_in_progress">Копирование&#8230; %1$d из %2$d</string>
+    <string name="notif_copy_current_file">Копирование %1$d из %2$d: %3$s</string>
     <string name="notif_copy_done">Копирование завершено</string>
 
     <string name="progress_ok">Перенесено %1$d из %2$d</string>
     <string name="progress_with_errors">Перенесено %1$d из %2$d (ошибки: %3$d)</string>
+    <string name="progress_current_file">%1$s\n%2$s: %3$s / %4$s</string>
+    <string name="progress_failed_with_reason">%1$s\nПричина: %2$s</string>
 
-    <string name="pref_use_dcim_all_title">Брать все видео из DCIM</string>
-    <string name="pref_use_dcim_all_summary">Искать во всех подпапках DCIM (включая сторонние камеры вроде DJI)</string>
+    <string name="pref_use_dcim_all_title">Искать во всех папках камер</string>
+    <string name="pref_use_dcim_all_summary">Сканировать все подпапки DCIM. Когда включено, точный выбор источника отключается.</string>
 
-    <!-- Выбор языка -->
     <string name="pref_category_general">Общие</string>
     <string name="pref_language_title">Язык приложения</string>
     <string name="pref_language_summary">Текущий: %1$s</string>
 
-    <!-- Разрешения / подсказки / ошибки -->
     <string name="toast_dest_persist_failed">Не удалось сохранить доступ к папке</string>
     <string name="toast_dest_selected">Папка назначения выбрана</string>
-    <string name="perm_video_rationale">Для работы нужно разрешение на чтение видео</string>
+    <string name="perm_video_rationale">Для работы нужен доступ к видео</string>
     <string name="perm_video_granted">Разрешение получено</string>
+    <string name="perm_video_partial">Доступ ограничен выбранными видео. Приложение сможет перенести только их.</string>
     <string name="perm_notifications_rationale">Разрешите уведомления, чтобы видеть прогресс копирования</string>
     <string name="toast_delete_request_failed">Не удалось запросить удаление: %1$s</string>
-    <string name="toast_pick_dest_first">Сначала выберите папку назначения (кнопка ниже или в Настройках)</string>
+    <string name="toast_pick_dest_first">Сначала выберите папку назначения</string>
     <string name="no_write_access">Нет доступа на запись к выбранной папке</string>
 
-    <!-- StorageUtil summaries -->
     <string name="dest_summary_label">Внешний накопитель: %1$s\nПапка: %2$s</string>
     <string name="dest_summary_no_label">Папка назначения:\n%1$s\n(%2$s)</string>
+    <string name="dest_summary_no_access">%1$s\nНет доступа на запись. Выберите папку заново.</string>
 
     <string name="source_detected">Источник определён: %1$s</string>
     <string name="source_detect_failed">Не удалось определить источник автоматически</string>
     <string name="source_get_from_video_failed">Не удалось получить путь для выбранного видео</string>
-    <string name="dcim_paths_not_found">Не найдено путей в DCIM/*</string>
+    <string name="dcim_paths_not_found">Папки камер не найдены</string>
     <string name="permission_media_denied">Для автоопределения источника нужен доступ к видео.</string>
-    <!-- Главный экран -->
-    <string name="main_title">Перенос видео на внешний накопитель</string>
+
+    <string name="main_title">Перенос видео с камеры на внешний накопитель</string>
     <string name="main_dest_label">Папка назначения</string>
+    <string name="main_usb_ready">Доступ к накопителю готов</string>
+    <string name="main_usb_missing">Выберите папку назначения</string>
 
     <string name="filecopier_err_stream_access">Нет доступа к потоку</string>
+    <string name="filecopier_err_create_temp">Не удалось создать временный файл</string>
     <string name="filecopier_err_size_mismatch">Размер не совпал</string>
     <string name="filecopier_err_rename_failed">Не удалось переименовать файл</string>
-
 </resources>

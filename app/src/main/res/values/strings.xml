@@ -1,32 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- App -->
     <string name="app_name">VideoMover</string>
 
-    <!-- Main -->
     <string name="dest_not_selected">Destination folder: not selected</string>
     <string name="choose_dest">Choose folder on USB drive</string>
     <string name="transfer">Move videos</string>
     <string name="settings">Settings</string>
 
-    <!-- Settings screen (sections & fields) -->
     <string name="pref_category_io">Paths</string>
-    <string name="pref_dest_title">Destination folder (SAF)</string>
+    <string name="pref_dest_title">Destination folder</string>
     <string name="pref_dest_summary">Current: %1$s</string>
-    <string name="pref_source_title">Source</string>
+    <string name="pref_source_title">Source folder</string>
     <string name="pref_detect_source_title">Detect source automatically</string>
-    <string name="pref_detect_source_summary">Find a typical camera folder (DCIM/Camera, etc.)</string>
+    <string name="pref_detect_source_summary">Find a typical camera folder such as DCIM/Camera</string>
 
     <string name="pref_category_behavior">Behavior</string>
     <string name="pref_delete_after_title">Delete originals after copying</string>
-    <string name="pref_delete_after_summary">ON by default — acts as a move, not just a copy</string>
+    <string name="pref_delete_after_summary">Enabled by default: the operation acts as move, not just copy</string>
 
-    <string name="pref_source_pick_list_title">Choose a source from the list</string>
-    <string name="pref_source_pick_list_summary">Show detected "camera" folders</string>
-    <string name="pref_source_pick_video_title">Detect source by a video</string>
+    <string name="pref_source_pick_list_title">Choose source from list</string>
+    <string name="pref_source_pick_list_summary">Show detected camera folders</string>
+    <string name="pref_source_pick_video_title">Detect source by video</string>
     <string name="pref_source_pick_video_summary">Pick any clip from the desired folder</string>
 
-    <!-- Dialogs / toasts / notifications -->
     <string name="toast_source_set">Source set: %1$s</string>
 
     <string name="deleting_done">Deleting finished</string>
@@ -34,45 +30,49 @@
 
     <string name="notif_channel_name">Video copy</string>
     <string name="notif_title">Moving videos</string>
-    <string name="notif_copy_in_progress">Copying… %1$d of %2$d</string>
+    <string name="notif_copy_in_progress">Copying&#8230; %1$d of %2$d</string>
+    <string name="notif_copy_current_file">Copying %1$d of %2$d: %3$s</string>
     <string name="notif_copy_done">Copy completed</string>
 
     <string name="progress_ok">Moved %1$d of %2$d</string>
     <string name="progress_with_errors">Moved %1$d of %2$d (errors: %3$d)</string>
+    <string name="progress_current_file">%1$s\n%2$s: %3$s / %4$s</string>
+    <string name="progress_failed_with_reason">%1$s\nIssue: %2$s</string>
 
-    <string name="pref_use_dcim_all_title">Take all videos from DCIM</string>
-    <string name="pref_use_dcim_all_summary">Search all DCIM subfolders (including third-party cameras like DJI)</string>
+    <string name="pref_use_dcim_all_title">Search all camera folders</string>
+    <string name="pref_use_dcim_all_summary">Scan all DCIM subfolders. When enabled, manual source selection is disabled.</string>
 
-    <!-- Language selector -->
     <string name="pref_category_general">General</string>
     <string name="pref_language_title">App language</string>
     <string name="pref_language_summary">Current: %1$s</string>
 
-    <!-- Permissions / hints / errors -->
     <string name="toast_dest_persist_failed">Failed to persist folder access</string>
     <string name="toast_dest_selected">Destination selected</string>
     <string name="perm_video_rationale">Video read permission is required for the app to work</string>
     <string name="perm_video_granted">Permission granted</string>
+    <string name="perm_video_partial">Access is limited to selected videos. Only those videos can be moved.</string>
     <string name="perm_notifications_rationale">Allow notifications to see copy progress</string>
     <string name="toast_delete_request_failed">Failed to request deletion: %1$s</string>
-    <string name="toast_pick_dest_first">Choose destination first (button below or Settings)</string>
+    <string name="toast_pick_dest_first">Choose destination first</string>
     <string name="no_write_access">No write access to the selected folder</string>
 
-    <!-- StorageUtil summaries -->
     <string name="dest_summary_label">External storage: %1$s\nFolder: %2$s</string>
     <string name="dest_summary_no_label">Destination folder:\n%1$s\n(%2$s)</string>
+    <string name="dest_summary_no_access">%1$s\nNo write access. Choose the folder again.</string>
 
     <string name="source_detected">Source detected: %1$s</string>
     <string name="source_detect_failed">Failed to detect source automatically</string>
     <string name="source_get_from_video_failed">Failed to get path for selected video</string>
-    <string name="dcim_paths_not_found">No paths found in DCIM/*</string>
+    <string name="dcim_paths_not_found">No camera folders found</string>
     <string name="permission_media_denied">Access to videos is required for detection.</string>
-    <!-- Main screen -->
-    <string name="main_title">Move videos to external storage</string>
+
+    <string name="main_title">Move camera videos to external storage</string>
     <string name="main_dest_label">Destination folder</string>
+    <string name="main_usb_ready">External storage access ready</string>
+    <string name="main_usb_missing">Choose a destination folder</string>
 
     <string name="filecopier_err_stream_access">Cannot access stream</string>
+    <string name="filecopier_err_create_temp">Failed to create a temporary file</string>
     <string name="filecopier_err_size_mismatch">Size mismatch</string>
     <string name="filecopier_err_rename_failed">Failed to rename file</string>
-
 </resources>

@@ -3,17 +3,26 @@ package ru.pavelkuzmin.videomover.domain;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
+import android.text.TextUtils;
 
 import androidx.documentfile.provider.DocumentFile;
 
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 
+import ru.pavelkuzmin.videomover.R;
 import ru.pavelkuzmin.videomover.util.HashUtil;
 
 public class FileCopier {
+    private static final int BUFFER_SIZE = 1024 * 1024;
+
+    public interface ProgressCallback {
+        void onProgress(long writtenBytes, long totalBytes);
+    }
 
     public static class Result {
         public final boolean ok;
@@ -23,78 +32,133 @@ public class FileCopier {
         public final String error;
 
         public Result(boolean ok, String finalName, long bytes, String sha256, String error) {
-            this.ok = ok; this.finalName = finalName; this.bytes = bytes; this.sha256 = sha256; this.error = error;
+            this.ok = ok;
+            this.finalName = finalName;
+            this.bytes = bytes;
+            this.sha256 = sha256;
+            this.error = error;
         }
     }
 
-    /** Копирует srcUri → destDir, создавая временный "<name>.partial", затем переименовывает. */
-    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName, long expectedSize, DocumentFile destDir) {
+    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName,
+                                        long expectedSize, DocumentFile destDir) {
+        return copyWithSha256(ctx, srcUri, displayName, expectedSize, destDir, null);
+    }
+
+    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName,
+                                        long expectedSize, DocumentFile destDir,
+                                        ProgressCallback progressCallback) {
+        ContentResolver cr = ctx.getContentResolver();
+        Uri tempUri = null;
+        long written = 0;
+        String hash = null;
+
         try {
-            // Разрулим коллизию имён для финального файла (finalName)
-            String base = displayName;
-            String ext = "";
-            int dot = base.lastIndexOf('.');
-            if (dot > 0 && dot < base.length()-1) {
-                ext = base.substring(dot);
-                base = base.substring(0, dot);
+            if (destDir == null || !destDir.canWrite()) {
+                return new Result(false, null, 0, null, ctx.getString(R.string.no_write_access));
             }
-            String finalName = ensureUniqueName(destDir, base, ext);
 
-            // Создаём временный .partial
-            String tempName = finalName + ".partial";
-            DocumentFile tempFile = destDir.createFile("video/*", tempName);
-            if (tempFile == null) return new Result(false, null, 0, null, "Failed to create a temporary file");
-            Uri tempUri = tempFile.getUri();
+            NameParts parts = splitName(displayName);
+            String finalName = ensureUniqueName(destDir, parts.base, parts.ext);
+            DocumentFile tempFile = destDir.createFile("video/*", finalName + ".partial");
+            if (tempFile == null) {
+                return new Result(false, null, 0, null, ctx.getString(R.string.filecopier_err_create_temp));
+            }
+            tempUri = tempFile.getUri();
 
-            ContentResolver cr = ctx.getContentResolver();
-            byte[] buf = new byte[1024 * 1024]; // 1MB буфер
-            long written = 0;
-
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[BUFFER_SIZE];
 
             try (InputStream in = cr.openInputStream(srcUri);
-                 OutputStream out = cr.openOutputStream(tempUri)) {
-                if (in == null || out == null) return new Result(false, null, 0, null, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_stream_access));
+                 ParcelFileDescriptor outDescriptor = cr.openFileDescriptor(tempUri, "w");
+                 OutputStream out = outDescriptor == null
+                         ? null
+                         : new FileOutputStream(outDescriptor.getFileDescriptor())) {
+                if (in == null || out == null) {
+                    deleteQuietly(cr, tempUri);
+                    return new Result(false, null, written, null,
+                            ctx.getString(R.string.filecopier_err_stream_access));
+                }
+
                 int read;
-                while ((read = in.read(buf)) != -1) {
-                    md.update(buf, 0, read);
-                    out.write(buf, 0, read);
+                while ((read = in.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                    out.write(buffer, 0, read);
                     written += read;
+                    if (progressCallback != null) {
+                        progressCallback.onProgress(written, expectedSize);
+                    }
                 }
                 out.flush();
+                if (outDescriptor != null) {
+                    outDescriptor.getFileDescriptor().sync();
+                }
             }
 
             if (expectedSize > 0 && written != expectedSize) {
-                // Размер не совпал — удаляем temp и выходим
-                DocumentsContract.deleteDocument(cr, tempUri);
-                return new Result(false, null, written, null, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_size_mismatch));
+                deleteQuietly(cr, tempUri);
+                return new Result(false, null, written, null,
+                        ctx.getString(R.string.filecopier_err_size_mismatch));
             }
 
-            String hash = HashUtil.toHex(md.digest());
-
-            // Переименовываем .partial → финальное имя
+            hash = HashUtil.toHex(digest.digest());
             Uri renamed = DocumentsContract.renameDocument(cr, tempUri, finalName);
             if (renamed == null) {
-                DocumentsContract.deleteDocument(cr, tempUri);
-                return new Result(false, null, written, hash, ctx.getString(ru.pavelkuzmin.videomover.R.string.filecopier_err_rename_failed));
+                deleteQuietly(cr, tempUri);
+                return new Result(false, null, written, hash,
+                        ctx.getString(R.string.filecopier_err_rename_failed));
             }
 
             return new Result(true, finalName, written, hash, null);
-
-        } catch (SecurityException se) {
-            return new Result(false, null, 0, null, "SecurityException: " + se.getMessage());
+        } catch (SecurityException e) {
+            deleteQuietly(cr, tempUri);
+            return new Result(false, null, written, hash, "SecurityException: " + e.getMessage());
         } catch (Exception e) {
-            return new Result(false, null, 0, null, e.getClass().getSimpleName() + ": " + e.getMessage());
+            deleteQuietly(cr, tempUri);
+            return new Result(false, null, written, hash,
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
         }
+    }
+
+    private static NameParts splitName(String displayName) {
+        String base = TextUtils.isEmpty(displayName) ? "video" : displayName.trim();
+        String ext = "";
+        int dot = base.lastIndexOf('.');
+        if (dot > 0 && dot < base.length() - 1) {
+            ext = base.substring(dot);
+            base = base.substring(0, dot);
+        }
+        if (TextUtils.isEmpty(base)) {
+            base = "video";
+        }
+        return new NameParts(base, ext);
     }
 
     private static String ensureUniqueName(DocumentFile dir, String base, String ext) {
         String candidate = base + ext;
         int n = 1;
-        while (dir.findFile(candidate) != null) {
+        while (dir.findFile(candidate) != null || dir.findFile(candidate + ".partial") != null) {
             candidate = base + " (" + n + ")" + ext;
             n++;
         }
         return candidate;
+    }
+
+    private static void deleteQuietly(ContentResolver cr, Uri uri) {
+        if (uri == null) return;
+        try {
+            DocumentsContract.deleteDocument(cr, uri);
+        } catch (Exception ignore) {
+        }
+    }
+
+    private static class NameParts {
+        final String base;
+        final String ext;
+
+        NameParts(String base, String ext) {
+            this.base = base;
+            this.ext = ext;
+        }
     }
 }

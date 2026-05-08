@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="vm_bg">#080D1C</color>
+    <color name="vm_bg_deep">#020613</color>
+    <color name="vm_surface">#151B31</color>
+    <color name="vm_surface_high">#202842</color>
+    <color name="vm_outline">#34415F</color>
+    <color name="vm_primary">#2CB7FF</color>
+    <color name="vm_primary_deep">#2468FF</color>
+    <color name="vm_on_primary">#FFFFFF</color>
+    <color name="vm_text">#F7FAFF</color>
+    <color name="vm_text_muted">#A8B2CC</color>
+    <color name="vm_success">#72E39B</color>
+    <color name="vm_success_bg">#183523</color>
 </resources>

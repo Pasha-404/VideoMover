@@ -5,129 +5,218 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurface"
+    android:background="@drawable/bg_app_background"
+    android:fitsSystemWindows="true"
     tools:context=".MainActivity">
 
-    <!-- Нижняя кнопка настроек, закреплена у низа -->
+    <ScrollView
+        android:id="@+id/contentScroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingHorizontal="22dp"
+        android:paddingTop="34dp"
+        android:paddingBottom="20dp"
+        app:layout_constraintBottom_toTopOf="@id/btnSettings"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:id="@+id/contentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/ivAppIcon"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:contentDescription="@string/app_name"
+                android:src="@mipmap/ic_launcher" />
+
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="@string/app_name"
+                android:textAppearance="?attr/textAppearanceDisplaySmall"
+                android:textColor="@color/vm_text"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="@string/main_title"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textColor="@color/vm_text_muted" />
+
+            <TextView
+                android:id="@+id/tvStorageStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/bg_status_missing"
+                android:drawablePadding="10dp"
+                android:gravity="center"
+                android:minWidth="220dp"
+                android:paddingHorizontal="18dp"
+                android:text="@string/main_usb_missing"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:textColor="@color/vm_text"
+                android:textStyle="bold"
+                app:drawableStartCompat="@drawable/ic_usb_24" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardDest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                app:cardBackgroundColor="@color/vm_surface"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/vm_outline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <FrameLayout
+                            android:layout_width="58dp"
+                            android:layout_height="58dp"
+                            android:background="@drawable/bg_icon_surface">
+
+                            <ImageView
+                                android:layout_width="30dp"
+                                android:layout_height="30dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_folder_24" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:id="@+id/tvDestHeader"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_weight="1"
+                            android:text="@string/main_dest_label"
+                            android:textAppearance="?attr/textAppearanceTitleLarge"
+                            android:textColor="@color/vm_text"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:id="@+id/ivDestCheck"
+                            android:layout_width="34dp"
+                            android:layout_height="34dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_check_24" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="18dp"
+                        android:background="@color/vm_outline" />
+
+                    <TextView
+                        android:id="@+id/tvDest"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:lineSpacingExtra="4dp"
+                        android:text="@string/dest_not_selected"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="@color/vm_text_muted"
+                        tools:text="External storage: USB Drive\nFolder: /Movies" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChooseDest"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginTop="26dp"
+                android:text="@string/choose_dest"
+                android:textAllCaps="false"
+                android:textColor="@color/vm_primary"
+                android:textSize="16sp"
+                app:cornerRadius="18dp"
+                app:icon="@drawable/ic_folder_24"
+                app:iconGravity="textStart"
+                app:iconPadding="12dp"
+                app:iconTint="@color/vm_primary"
+                app:strokeColor="@color/vm_primary"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTransfer"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:layout_marginTop="14dp"
+                android:enabled="false"
+                android:text="@string/transfer"
+                android:textAllCaps="false"
+                android:textColor="@color/vm_on_primary"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/vm_primary_deep"
+                app:cornerRadius="20dp"
+                app:icon="@drawable/ic_transfer_24"
+                app:iconGravity="textStart"
+                app:iconPadding="12dp"
+                app:iconTint="@color/vm_on_primary" />
+
+            <TextView
+                android:id="@+id/tvProgress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:lineSpacingExtra="3dp"
+                android:minHeight="44dp"
+                android:textColor="@color/vm_text_muted"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                tools:text="Moved 3 of 10\nVID_20260508.mp4: 120 MB / 840 MB" />
+        </LinearLayout>
+    </ScrollView>
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSettings"
         style="?attr/materialButtonOutlinedStyle"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="60dp"
+        android:layout_height="54dp"
+        android:layout_marginBottom="28dp"
+        android:minWidth="190dp"
         android:text="@string/settings"
         android:textAllCaps="false"
+        android:textColor="@color/vm_text"
+        app:cornerRadius="27dp"
+        app:icon="@drawable/ic_settings_24"
+        app:iconGravity="textStart"
+        app:iconPadding="10dp"
+        app:iconTint="@color/vm_text"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Контейнер основного контента, центрируем ВНУТРИ пространства над кнопкой настроек -->
-    <LinearLayout
-        android:id="@+id/contentContainer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:gravity="center_vertical|center_horizontal"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/btnSettings"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <!-- Заголовок -->
-        <TextView
-            android:id="@+id/tvTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="VideoMover"
-            android:textAppearance="?attr/textAppearanceHeadlineMedium"
-            android:textColor="?attr/colorOnSurface"
-            android:gravity="center"
-            android:paddingBottom="4dp" />
-
-        <!-- Подзаголовок -->
-        <TextView
-            android:id="@+id/tvSubtitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/main_title"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:gravity="center"
-            android:paddingBottom="20dp" />
-
-        <!-- Карточка назначения -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardDest"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:layout_marginBottom="16dp"
-            app:cardUseCompatPadding="true"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="2dp"
-            app:strokeColor="?attr/colorOutline"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/tvDestHeader"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/main_dest_label"
-                    android:textAppearance="?attr/textAppearanceTitleMedium"
-                    android:textColor="?attr/colorOnSurface" />
-
-                <!-- ВАЖНО: id прежний, чтобы код обновлял текст -->
-                <TextView
-                    android:id="@+id/tvDest"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/dest_not_selected"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant"
-                    tools:text="Внешний накопитель: SanDisk 128GB\nПапка: /Movies/Camera" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Кнопка выбора назначения -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnChooseDest"
-            style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="56dp"
-            android:text="@string/choose_dest"
-            android:textAllCaps="false" />
-
-        <!-- Главная кнопка: Перенести -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnTransfer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:minHeight="56dp"
-            android:text="@string/transfer"
-            android:textAllCaps="false"
-            android:enabled="false" />
-
-        <!-- Прогресс: строкой -->
-        <TextView
-            android:id="@+id/tvProgress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text=""
-            android:gravity="center"
-            android:textAppearance="?attr/textAppearanceBodyMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            tools:text="Перенесено 3 из 10 (ошибок: 1)" />
-    </LinearLayout>
-
+        app:strokeColor="@color/vm_outline"
+        app:strokeWidth="1dp" />
 </androidx.constraintlayout.widget.ConstraintLayout>
