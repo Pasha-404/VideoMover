@@ -26,13 +26,15 @@ public class FileCopier {
 
     public static class Result {
         public final boolean ok;
+        public final boolean duplicate;
         public final String finalName;
         public final long bytes;
         public final String sha256;
         public final String error;
 
-        public Result(boolean ok, String finalName, long bytes, String sha256, String error) {
+        public Result(boolean ok, boolean duplicate, String finalName, long bytes, String sha256, String error) {
             this.ok = ok;
+            this.duplicate = duplicate;
             this.finalName = finalName;
             this.bytes = bytes;
             this.sha256 = sha256;
@@ -55,14 +57,19 @@ public class FileCopier {
 
         try {
             if (destDir == null || !destDir.canWrite()) {
-                return new Result(false, null, 0, null, ctx.getString(R.string.no_write_access));
+                return new Result(false, false, null, 0, null, ctx.getString(R.string.no_write_access));
             }
 
             NameParts parts = splitName(displayName);
+            DocumentFile existing = destDir.findFile(displayName);
+            if (existing != null && existing.isFile() && expectedSize > 0 && existing.length() == expectedSize) {
+                return new Result(true, true, displayName, expectedSize, null, null);
+            }
+
             String finalName = ensureUniqueName(destDir, parts.base, parts.ext);
             DocumentFile tempFile = destDir.createFile("video/*", finalName + ".partial");
             if (tempFile == null) {
-                return new Result(false, null, 0, null, ctx.getString(R.string.filecopier_err_create_temp));
+                return new Result(false, false, null, 0, null, ctx.getString(R.string.filecopier_err_create_temp));
             }
             tempUri = tempFile.getUri();
 
@@ -76,7 +83,7 @@ public class FileCopier {
                          : new FileOutputStream(outDescriptor.getFileDescriptor())) {
                 if (in == null || out == null) {
                     deleteQuietly(cr, tempUri);
-                    return new Result(false, null, written, null,
+                    return new Result(false, false, null, written, null,
                             ctx.getString(R.string.filecopier_err_stream_access));
                 }
 
@@ -97,7 +104,7 @@ public class FileCopier {
 
             if (expectedSize > 0 && written != expectedSize) {
                 deleteQuietly(cr, tempUri);
-                return new Result(false, null, written, null,
+                return new Result(false, false, null, written, null,
                         ctx.getString(R.string.filecopier_err_size_mismatch));
             }
 
@@ -105,17 +112,17 @@ public class FileCopier {
             Uri renamed = DocumentsContract.renameDocument(cr, tempUri, finalName);
             if (renamed == null) {
                 deleteQuietly(cr, tempUri);
-                return new Result(false, null, written, hash,
+                return new Result(false, false, null, written, hash,
                         ctx.getString(R.string.filecopier_err_rename_failed));
             }
 
-            return new Result(true, finalName, written, hash, null);
+            return new Result(true, false, finalName, written, hash, null);
         } catch (SecurityException e) {
             deleteQuietly(cr, tempUri);
-            return new Result(false, null, written, hash, "SecurityException: " + e.getMessage());
+            return new Result(false, false, null, written, hash, "SecurityException: " + e.getMessage());
         } catch (Exception e) {
             deleteQuietly(cr, tempUri);
-            return new Result(false, null, written, hash,
+            return new Result(false, false, null, written, hash,
                     e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }

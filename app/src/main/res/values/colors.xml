@@ -12,4 +12,5 @@
     <color name="vm_text_muted">#A8B2CC</color>
     <color name="vm_success">#72E39B</color>
     <color name="vm_success_bg">#183523</color>
+    <color name="vm_warning">#FFD166</color>
 </resources>

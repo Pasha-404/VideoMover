@@ -244,6 +244,12 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private String[] requiredMediaPermissions() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                return new String[]{
+                        android.Manifest.permission.READ_MEDIA_VIDEO,
+                        android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+                };
+            }
             if (Build.VERSION.SDK_INT >= 33) {
                 return new String[]{android.Manifest.permission.READ_MEDIA_VIDEO};
             }

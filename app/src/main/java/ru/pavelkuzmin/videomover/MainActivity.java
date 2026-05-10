@@ -19,6 +19,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
@@ -35,27 +36,13 @@ public class MainActivity extends AppCompatActivity {
     private static final int VIDEO_ACCESS_DENIED = 0;
     private static final int VIDEO_ACCESS_FULL = 1;
     private static final int VIDEO_ACCESS_PARTIAL = 2;
+    private static final int PROGRESS_MAX = 1000;
 
     private ActivityMainBinding binding;
     private boolean transferPendingAfterVideoPermission;
     private boolean transferPendingAfterNotificationPermission;
-
-    private final ActivityResultLauncher<Intent> openTreeLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
-                Intent data = result.getData();
-                Uri treeUri = data.getData();
-                if (treeUri == null) return;
-                try {
-                    SafUtil.persistTreePermission(this, data, treeUri);
-                } catch (SecurityException e) {
-                    Toast.makeText(this, getString(R.string.toast_dest_persist_failed), Toast.LENGTH_LONG).show();
-                    return;
-                }
-                SettingsStore.setDestTreeUri(this, treeUri);
-                updateDestUi();
-                Toast.makeText(this, getString(R.string.toast_dest_selected), Toast.LENGTH_SHORT).show();
-            });
+    private boolean copyRunning;
+    private String pendingDeleteResultText;
 
     private final ActivityResultLauncher<String[]> videoPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), results -> {
@@ -89,33 +76,34 @@ public class MainActivity extends AppCompatActivity {
     private final ActivityResultLauncher<IntentSenderRequest> deleteLauncher =
             registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK) {
+                    markProcessFinished(getString(R.string.process_delete_done, pendingDeleteResultText), false);
                     Toast.makeText(this, getString(R.string.deleting_done), Toast.LENGTH_LONG).show();
                 } else {
+                    markProcessFinished(getString(R.string.process_delete_canceled, pendingDeleteResultText), true);
                     Toast.makeText(this, getString(R.string.deleting_canceled), Toast.LENGTH_LONG).show();
                 }
+                pendingDeleteResultText = null;
             });
 
     private final BroadcastReceiver progressReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            int done = intent.getIntExtra(CopyService.EXTRA_DONE, 0);
-            int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
-            int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
-            String currentName = intent.getStringExtra(CopyService.EXTRA_CURRENT_NAME);
-            long currentBytes = intent.getLongExtra(CopyService.EXTRA_CURRENT_BYTES, 0);
-            long currentTotalBytes = intent.getLongExtra(CopyService.EXTRA_CURRENT_TOTAL_BYTES, 0);
-
-            binding.tvProgress.setText(buildProgressText(
-                    done, total, fail, currentName, currentBytes, currentTotalBytes));
+            copyRunning = true;
+            binding.btnTransfer.setEnabled(false);
+            binding.btnSettings.setEnabled(false);
+            binding.btnEjectHint.setVisibility(View.GONE);
+            updateProcessFromProgress(intent);
         }
     };
 
     private final BroadcastReceiver doneReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            int ok = intent.getIntExtra(CopyService.EXTRA_OK, 0);
+            int copied = intent.getIntExtra(CopyService.EXTRA_OK, 0);
             int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
             int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
+            int duplicates = intent.getIntExtra(CopyService.EXTRA_DUPLICATES, 0);
+            long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
             String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
 
             ArrayList<String> toDeleteStr = intent.getStringArrayListExtra(CopyService.EXTRA_TO_DELETE);
@@ -126,20 +114,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            String result = fail > 0
-                    ? getString(R.string.progress_with_errors, ok, total, fail)
-                    : getString(R.string.progress_ok, ok, total);
             if (!TextUtils.isEmpty(error)) {
-                result = getString(R.string.progress_failed_with_reason, result, error);
+                markProcessFinished(getString(R.string.process_failed_detail, error), true);
+                Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
+                return;
             }
-            binding.tvProgress.setText(result);
-            Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show();
 
+            String resultText = buildFinalSummary(copied, total, fail, duplicates, copiedBytes);
             if (SettingsStore.isDeleteAfter(MainActivity.this) && !toDelete.isEmpty()) {
+                pendingDeleteResultText = resultText;
+                setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
+                        PROGRESS_MAX, false, false);
                 requestDeleteOriginals(toDelete);
+                return;
             }
 
-            unlockUi();
+            markProcessFinished(resultText, fail > 0);
+            Toast.makeText(MainActivity.this, resultText, Toast.LENGTH_LONG).show();
         }
     };
 
@@ -149,12 +140,12 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        binding.btnChooseDest.setOnClickListener(v -> openDestTree());
         binding.btnTransfer.setOnClickListener(v -> onTransferAll());
         binding.btnSettings.setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
+        binding.btnEjectHint.setOnClickListener(v -> showEjectInstruction());
 
-        updateDestUi();
+        refreshMainInfo(true);
         if (ensureVideoPermission(false)) {
             maybeAutodetectSourceOnFirstRun();
         }
@@ -169,6 +160,17 @@ public class MainActivity extends AppCompatActivity {
         ContextCompat.registerReceiver(this, doneReceiver,
                 new IntentFilter(CopyService.ACTION_DONE),
                 ContextCompat.RECEIVER_NOT_EXPORTED);
+        if (!copyRunning) {
+            refreshMainInfo(true);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!copyRunning) {
+            refreshMainInfo(true);
+        }
     }
 
     @Override
@@ -182,10 +184,6 @@ public class MainActivity extends AppCompatActivity {
             unregisterReceiver(doneReceiver);
         } catch (Exception ignore) {
         }
-    }
-
-    private void openDestTree() {
-        openTreeLauncher.launch(SafUtil.createOpenTreeIntent());
     }
 
     private boolean ensureVideoPermission(boolean continueTransferAfterGrant) {
@@ -254,29 +252,28 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private void updateDestUi() {
-        updateDestUi(true);
-    }
+    private void refreshMainInfo(boolean resetProcess) {
+        boolean deleteAfter = SettingsStore.isDeleteAfter(this);
+        binding.btnTransfer.setText(deleteAfter ? R.string.transfer : R.string.copy_videos);
+        binding.tvActionMode.setText(deleteAfter ? R.string.main_action_move : R.string.main_action_copy);
+        binding.tvSearchMode.setText(buildSearchModeText());
 
-    private void updateDestUi(boolean clearProgress) {
         Uri uri = SettingsStore.getDestTreeUri(this);
+        boolean writable = false;
         if (uri == null) {
             binding.tvDest.setText(getString(R.string.dest_not_selected));
-            binding.btnTransfer.setEnabled(false);
-            binding.tvStorageStatus.setBackgroundResource(R.drawable.bg_status_missing);
-            binding.tvStorageStatus.setText(R.string.main_usb_missing);
-            binding.tvStorageStatus.setTextColor(ContextCompat.getColor(this, R.color.vm_text));
-            binding.ivDestCheck.setVisibility(View.INVISIBLE);
-            if (clearProgress) binding.tvProgress.setText("");
-            return;
+            binding.tvFreeSpace.setText(R.string.main_free_space_unknown);
+        } else {
+            String summary = StorageUtil.buildDestSummary(this, uri);
+            writable = SafUtil.hasPersistedWritePermission(this, uri) && SafUtil.canWriteTree(this, uri);
+            binding.tvDest.setText(writable ? summary : getString(R.string.dest_summary_no_access));
+            long available = StorageUtil.getAvailableBytes(this, uri);
+            binding.tvFreeSpace.setText(available >= 0
+                    ? getString(R.string.main_free_space, formatBytes(available))
+                    : getString(R.string.main_free_space_unknown));
         }
 
-        String summary = StorageUtil.buildDestSummary(this, uri);
-        boolean writable = SafUtil.hasPersistedWritePermission(this, uri) && SafUtil.canWriteTree(this, uri);
-        binding.tvDest.setText(writable
-                ? summary
-                : getString(R.string.dest_summary_no_access));
-        binding.btnTransfer.setEnabled(writable);
+        binding.btnTransfer.setEnabled(!copyRunning && writable && isSourceModeReady());
         binding.tvStorageStatus.setBackgroundResource(writable
                 ? R.drawable.bg_status_ready
                 : R.drawable.bg_status_missing);
@@ -285,19 +282,41 @@ public class MainActivity extends AppCompatActivity {
                 : R.string.main_usb_missing);
         binding.tvStorageStatus.setTextColor(ContextCompat.getColor(this,
                 writable ? R.color.vm_success : R.color.vm_text));
-        binding.ivDestCheck.setVisibility(writable ? View.VISIBLE : View.INVISIBLE);
-        if (clearProgress) binding.tvProgress.setText("");
+
+        if (resetProcess) {
+            binding.btnEjectHint.setVisibility(View.GONE);
+            if (!writable) {
+                setIdleProcess(getString(R.string.process_setup_needed_title),
+                        getString(R.string.process_setup_needed_detail));
+            } else if (!isSourceModeReady()) {
+                setIdleProcess(getString(R.string.process_setup_needed_title),
+                        getString(R.string.toast_pick_source_first));
+            } else {
+                setIdleProcess(getString(deleteAfter
+                                ? R.string.process_idle_move_title
+                                : R.string.process_idle_copy_title),
+                        getString(R.string.process_idle_detail));
+            }
+        }
     }
 
-    private void maybeAutodetectSourceOnFirstRun() {
-        String current = SettingsStore.getSourceRelPath(this);
-        if (!TextUtils.isEmpty(current)) return;
-        new Thread(() -> {
-            String detected = ru.pavelkuzmin.videomover.data.MediaQuery.detectLikelyCameraRelPath(this);
-            if (!TextUtils.isEmpty(detected)) {
-                SettingsStore.setSourceRelPath(this, detected);
-            }
-        }).start();
+    private String buildSearchModeText() {
+        if (SettingsStore.isUseDcimAll(this)) {
+            return getString(R.string.main_search_all);
+        }
+        String rel = SettingsStore.getSourceRelPath(this);
+        return TextUtils.isEmpty(rel)
+                ? getString(R.string.main_search_manual_missing)
+                : getString(R.string.main_search_manual, rel);
+    }
+
+    private boolean isSourceModeReady() {
+        return SettingsStore.isUseDcimAll(this)
+                || !TextUtils.isEmpty(SettingsStore.getSourceRelPath(this));
+    }
+
+    private void setIdleProcess(String title, String detail) {
+        setProcessStage(title, detail, 0, false, false);
     }
 
     private void onTransferAll() {
@@ -306,19 +325,29 @@ public class MainActivity extends AppCompatActivity {
         Uri destTree = SettingsStore.getDestTreeUri(this);
         if (destTree == null) {
             Toast.makeText(this, getString(R.string.toast_pick_dest_first), Toast.LENGTH_LONG).show();
+            refreshMainInfo(true);
             return;
         }
         if (!SafUtil.canWriteTree(this, destTree)) {
             Toast.makeText(this, getString(R.string.no_write_access), Toast.LENGTH_LONG).show();
-            updateDestUi();
+            refreshMainInfo(true);
             return;
         }
-
+        if (!isSourceModeReady()) {
+            Toast.makeText(this, getString(R.string.toast_pick_source_first), Toast.LENGTH_LONG).show();
+            refreshMainInfo(true);
+            return;
+        }
         if (!ensureNotificationPermission(true)) return;
 
-        lockUiForCopy();
-        boolean useDcimAll = SettingsStore.isUseDcimAll(this);
+        copyRunning = true;
+        binding.btnTransfer.setEnabled(false);
+        binding.btnSettings.setEnabled(false);
+        binding.btnEjectHint.setVisibility(View.GONE);
+        setProcessStage(getString(R.string.stage_searching), getString(R.string.process_searching_detail),
+                0, true, false);
 
+        boolean useDcimAll = SettingsStore.isUseDcimAll(this);
         Intent service = new Intent(this, CopyService.class);
         service.setAction(CopyService.ACTION_START);
         service.putExtra(CopyService.EXTRA_DEST_URI, destTree.toString());
@@ -332,7 +361,128 @@ public class MainActivity extends AppCompatActivity {
         }
 
         ContextCompat.startForegroundService(this, service);
-        binding.tvProgress.setText(getString(R.string.progress_ok, 0, 0));
+    }
+
+    private void updateProcessFromProgress(Intent intent) {
+        int stage = intent.getIntExtra(CopyService.EXTRA_STAGE, CopyService.STAGE_COPYING);
+        int done = intent.getIntExtra(CopyService.EXTRA_DONE, 0);
+        int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
+        int copied = intent.getIntExtra(CopyService.EXTRA_OK, 0);
+        int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
+        int duplicates = intent.getIntExtra(CopyService.EXTRA_DUPLICATES, 0);
+        String currentName = intent.getStringExtra(CopyService.EXTRA_CURRENT_NAME);
+        long currentBytes = intent.getLongExtra(CopyService.EXTRA_CURRENT_BYTES, 0L);
+        long currentTotalBytes = intent.getLongExtra(CopyService.EXTRA_CURRENT_TOTAL_BYTES, 0L);
+        long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
+        long totalBytes = intent.getLongExtra(CopyService.EXTRA_TOTAL_BYTES, 0L);
+        long availableBytes = intent.getLongExtra(CopyService.EXTRA_AVAILABLE_BYTES, -1L);
+        long speed = intent.getLongExtra(CopyService.EXTRA_SPEED_BYTES_PER_SECOND, 0L);
+        String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
+
+        int progress = calculateProgress(stage, done, total, copiedBytes, totalBytes);
+        boolean indeterminate = stage == CopyService.STAGE_SEARCHING || stage == CopyService.STAGE_CHECKING_SPACE;
+        setProcessStage(getStageTitle(stage, done, total), buildStageDetail(stage, copied, fail, duplicates,
+                        currentName, currentBytes, currentTotalBytes, copiedBytes, totalBytes,
+                        availableBytes, speed, error),
+                progress, indeterminate, stage == CopyService.STAGE_ERROR);
+    }
+
+    private int calculateProgress(int stage, int done, int total, long copiedBytes, long totalBytes) {
+        if (stage == CopyService.STAGE_DONE) return PROGRESS_MAX;
+        if (stage == CopyService.STAGE_ERROR) return 0;
+        if (totalBytes > 0) {
+            return (int) Math.max(0, Math.min(PROGRESS_MAX, copiedBytes * PROGRESS_MAX / totalBytes));
+        }
+        if (total > 0) {
+            return (int) Math.max(0, Math.min(PROGRESS_MAX, done * PROGRESS_MAX / total));
+        }
+        return 0;
+    }
+
+    private String getStageTitle(int stage, int done, int total) {
+        switch (stage) {
+            case CopyService.STAGE_SEARCHING:
+                return getString(R.string.stage_searching);
+            case CopyService.STAGE_CHECKING_SPACE:
+                return getString(R.string.stage_checking_space);
+            case CopyService.STAGE_VERIFYING:
+                return getString(R.string.stage_verifying);
+            case CopyService.STAGE_DONE:
+                return getString(R.string.stage_done);
+            case CopyService.STAGE_ERROR:
+                return getString(R.string.stage_problem);
+            case CopyService.STAGE_COPYING:
+            default:
+                return getString(R.string.stage_copying, Math.min(done + 1, Math.max(total, 1)), total);
+        }
+    }
+
+    private String buildStageDetail(int stage, int copied, int fail, int duplicates,
+                                    @Nullable String currentName, long currentBytes,
+                                    long currentTotalBytes, long copiedBytes, long totalBytes,
+                                    long availableBytes, long speed, @Nullable String error) {
+        if (!TextUtils.isEmpty(error)) {
+            return getString(R.string.process_failed_detail, error);
+        }
+        if (stage == CopyService.STAGE_SEARCHING) {
+            return getString(R.string.process_searching_detail);
+        }
+        if (stage == CopyService.STAGE_CHECKING_SPACE) {
+            return availableBytes >= 0
+                    ? getString(R.string.process_space_detail, formatBytes(totalBytes), formatBytes(availableBytes))
+                    : getString(R.string.process_space_unknown_detail, formatBytes(totalBytes));
+        }
+        if (stage == CopyService.STAGE_DONE) {
+            return getString(R.string.stage_done);
+        }
+
+        String status = getString(R.string.process_counters, copied, duplicates, fail);
+        if (TextUtils.isEmpty(currentName)) {
+            return status;
+        }
+        String bytes = currentTotalBytes > 0
+                ? getString(R.string.process_file_bytes, formatBytes(currentBytes), formatBytes(currentTotalBytes))
+                : formatBytes(copiedBytes);
+        String speedText = speed > 0
+                ? getString(R.string.process_speed, formatRate(speed), formatEta(totalBytes - copiedBytes, speed))
+                : getString(R.string.process_speed_waiting);
+        return getString(R.string.process_file_detail, status, currentName, bytes, speedText);
+    }
+
+    private void setProcessStage(String title, String detail, int progress,
+                                 boolean indeterminate, boolean problem) {
+        binding.tvProcessStage.setText(title);
+        binding.tvProcessStage.setTextColor(ContextCompat.getColor(this,
+                problem ? R.color.vm_warning : R.color.vm_text));
+        binding.tvProgress.setText(detail);
+        binding.processProgress.setIndeterminate(indeterminate);
+        if (!indeterminate) {
+            binding.processProgress.setProgress(Math.max(0, Math.min(PROGRESS_MAX, progress)));
+        }
+    }
+
+    private String buildFinalSummary(int copied, int total, int fail, int duplicates, long copiedBytes) {
+        if (total == 0) {
+            return getString(R.string.process_done_no_files);
+        }
+        if (fail > 0) {
+            return getString(R.string.process_done_with_errors,
+                    copied, duplicates, fail, formatBytes(copiedBytes));
+        }
+        if (duplicates > 0) {
+            return getString(R.string.process_done_with_duplicates,
+                    copied, duplicates, formatBytes(copiedBytes));
+        }
+        return getString(R.string.process_done_success, copied, formatBytes(copiedBytes));
+    }
+
+    private void markProcessFinished(String detail, boolean problem) {
+        copyRunning = false;
+        setProcessStage(getString(problem ? R.string.stage_problem : R.string.stage_done),
+                detail, problem ? 0 : PROGRESS_MAX, false, problem);
+        binding.btnEjectHint.setVisibility(View.VISIBLE);
+        binding.btnSettings.setEnabled(true);
+        refreshMainInfo(false);
     }
 
     private void requestDeleteOriginals(ArrayList<Uri> toDelete) {
@@ -343,9 +493,7 @@ public class MainActivity extends AppCompatActivity {
                         .getIntentSender();
                 deleteLauncher.launch(new IntentSenderRequest.Builder(sender).build());
             } catch (Exception e) {
-                Toast.makeText(this,
-                        getString(R.string.toast_delete_request_failed, e.getMessage()),
-                        Toast.LENGTH_LONG).show();
+                markProcessFinished(getString(R.string.toast_delete_request_failed, e.getMessage()), true);
             }
             return;
         }
@@ -356,25 +504,32 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignore) {
             }
         }
+        markProcessFinished(getString(R.string.process_delete_done, pendingDeleteResultText), false);
         Toast.makeText(this, getString(R.string.deleting_done), Toast.LENGTH_SHORT).show();
+        pendingDeleteResultText = null;
     }
 
-    private String buildProgressText(int done, int total, int fail, @Nullable String currentName,
-                                     long currentBytes, long currentTotalBytes) {
-        String base = fail > 0
-                ? getString(R.string.progress_with_errors, done, total, fail)
-                : getString(R.string.progress_ok, done, total);
-        if (TextUtils.isEmpty(currentName) || currentTotalBytes <= 0) {
-            return base;
-        }
-        return getString(R.string.progress_current_file,
-                base,
-                currentName,
-                formatBytes(currentBytes),
-                formatBytes(currentTotalBytes));
+    private void showEjectInstruction() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.eject_ready_title)
+                .setMessage(R.string.eject_ready_message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
+    private void maybeAutodetectSourceOnFirstRun() {
+        String current = SettingsStore.getSourceRelPath(this);
+        if (!TextUtils.isEmpty(current)) return;
+        new Thread(() -> {
+            String detected = ru.pavelkuzmin.videomover.data.MediaQuery.detectLikelyCameraRelPath(this);
+            if (!TextUtils.isEmpty(detected)) {
+                SettingsStore.setSourceRelPath(this, detected);
+            }
+        }).start();
     }
 
     private String formatBytes(long bytes) {
+        if (bytes < 0) return getString(R.string.value_unknown);
         if (bytes < 1024) return bytes + " B";
         double kb = bytes / 1024d;
         if (kb < 1024) return String.format(Locale.ROOT, "%.1f KB", kb);
@@ -383,15 +538,23 @@ public class MainActivity extends AppCompatActivity {
         return String.format(Locale.ROOT, "%.2f GB", mb / 1024d);
     }
 
-    private void lockUiForCopy() {
-        binding.btnTransfer.setEnabled(false);
-        binding.btnChooseDest.setEnabled(false);
-        binding.btnSettings.setEnabled(false);
+    private String formatRate(long bytesPerSecond) {
+        return getString(R.string.value_per_second, formatBytes(bytesPerSecond));
     }
 
-    private void unlockUi() {
-        updateDestUi(false);
-        binding.btnChooseDest.setEnabled(true);
-        binding.btnSettings.setEnabled(true);
+    private String formatEta(long remainingBytes, long speedBytesPerSecond) {
+        if (remainingBytes <= 0 || speedBytesPerSecond <= 0) {
+            return getString(R.string.value_eta_short);
+        }
+        long seconds = Math.max(1L, remainingBytes / speedBytesPerSecond);
+        if (seconds < 60) {
+            return getString(R.string.value_eta_seconds, seconds);
+        }
+        long minutes = seconds / 60;
+        if (minutes < 60) {
+            return getString(R.string.value_eta_minutes, minutes);
+        }
+        long hours = minutes / 60;
+        return getString(R.string.value_eta_hours, hours);
     }
 }
