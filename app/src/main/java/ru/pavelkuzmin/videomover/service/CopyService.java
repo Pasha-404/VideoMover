@@ -25,6 +25,7 @@ import java.util.Locale;
 import ru.pavelkuzmin.videomover.MainActivity;
 import ru.pavelkuzmin.videomover.R;
 import ru.pavelkuzmin.videomover.data.MediaQuery;
+import ru.pavelkuzmin.videomover.data.OperationStateStore;
 import ru.pavelkuzmin.videomover.domain.FileCopier;
 import ru.pavelkuzmin.videomover.util.StorageUtil;
 
@@ -134,6 +135,9 @@ public class CopyService extends Service {
     }
 
     private void stopWithError(int startId, String errorMessage) {
+        OperationStateStore.saveFinished(this, STAGE_ERROR, 0, 0, 0, 0,
+                0L, 0L, -1L, errorMessage, new ArrayList<>());
+
         Intent doneIntent = new Intent(ACTION_DONE);
         doneIntent.setPackage(getPackageName());
         doneIntent.putExtra(EXTRA_STAGE, STAGE_ERROR);
@@ -266,6 +270,10 @@ public class CopyService extends Service {
                 doneIntent.putExtra(EXTRA_ERROR_MESSAGE, fatalError);
             }
             doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE, toDelete);
+            OperationStateStore.saveFinished(this,
+                    TextUtils.isEmpty(fatalError) ? STAGE_DONE : STAGE_ERROR,
+                    total, copied[0], fail[0], duplicates[0], copiedBytes[0],
+                    totalBytes, availableBytes, fatalError, toDelete);
             sendBroadcast(doneIntent);
 
             releaseCopyWakeLock();
@@ -289,6 +297,12 @@ public class CopyService extends Service {
                               long currentTotalBytes, long copiedBytes, long totalBytes,
                               long availableBytes, long speedBytesPerSecond,
                               @Nullable String errorMessage) {
+        if (stage != STAGE_DONE && stage != STAGE_ERROR) {
+            OperationStateStore.saveProgress(this, stage, done, total, copied, fail, duplicates,
+                    currentName, currentBytes, currentTotalBytes, copiedBytes, totalBytes,
+                    availableBytes, speedBytesPerSecond, errorMessage);
+        }
+
         String text = buildNotificationText(stage, done, total, currentName);
         notificationManager.notify(NOTIF_ID, buildNotification(
                 getString(R.string.notif_title),

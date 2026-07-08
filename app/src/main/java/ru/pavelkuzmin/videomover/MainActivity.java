@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.Locale;
 
+import ru.pavelkuzmin.videomover.data.OperationStateStore;
 import ru.pavelkuzmin.videomover.data.SettingsStore;
 import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
 import ru.pavelkuzmin.videomover.service.CopyService;
@@ -108,38 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private final BroadcastReceiver doneReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            int copied = intent.getIntExtra(CopyService.EXTRA_OK, 0);
-            int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
-            int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
-            int duplicates = intent.getIntExtra(CopyService.EXTRA_DUPLICATES, 0);
-            long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
-            String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
-
-            ArrayList<String> toDeleteStr = intent.getStringArrayListExtra(CopyService.EXTRA_TO_DELETE);
-            ArrayList<Uri> toDelete = new ArrayList<>();
-            if (toDeleteStr != null) {
-                for (String value : toDeleteStr) {
-                    toDelete.add(Uri.parse(value));
-                }
-            }
-
-            if (!TextUtils.isEmpty(error)) {
-                markProcessFinished(getString(R.string.process_failed_detail, error), true);
-                Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
-                return;
-            }
-
-            String resultText = buildFinalSummary(copied, total, fail, duplicates, copiedBytes);
-            if (SettingsStore.isDeleteAfter(MainActivity.this) && !toDelete.isEmpty()) {
-                pendingDeleteResultText = resultText;
-                setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
-                        PROGRESS_MAX, false, false);
-                requestDeleteOriginals(toDelete);
-                return;
-            }
-
-            markProcessFinished(resultText, fail > 0);
-            Toast.makeText(MainActivity.this, resultText, Toast.LENGTH_LONG).show();
+            handleDoneIntent(intent, true);
         }
     };
 
@@ -169,15 +139,12 @@ public class MainActivity extends AppCompatActivity {
         ContextCompat.registerReceiver(this, doneReceiver,
                 new IntentFilter(CopyService.ACTION_DONE),
                 ContextCompat.RECEIVER_NOT_EXPORTED);
-        if (!copyRunning) {
-            refreshMainInfoAndStartDestinationRecheck(true);
-        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (!copyRunning) {
+        if (!restorePersistedOperationState() && !copyRunning) {
             refreshMainInfoAndStartDestinationRecheck(true);
         }
     }
@@ -194,6 +161,88 @@ public class MainActivity extends AppCompatActivity {
             unregisterReceiver(doneReceiver);
         } catch (Exception ignore) {
         }
+    }
+
+    private boolean restorePersistedOperationState() {
+        OperationStateStore.Snapshot snapshot = OperationStateStore.read(this);
+        if (snapshot == null || snapshot.resultHandled || snapshot.stage == 0) {
+            return false;
+        }
+
+        if (snapshot.stage == CopyService.STAGE_DONE || snapshot.stage == CopyService.STAGE_ERROR) {
+            handleCopyFinished(snapshot.copied, snapshot.total, snapshot.fail,
+                    snapshot.duplicates, snapshot.copiedBytes, snapshot.errorMessage,
+                    snapshot.toDelete, false, snapshot.deleteRequested);
+            return true;
+        }
+
+        copyRunning = true;
+        stopDestinationRecheck();
+        binding.btnTransfer.setEnabled(false);
+        binding.btnSettings.setEnabled(false);
+        binding.btnEjectHint.setVisibility(View.GONE);
+        updateProcessFromSnapshot(snapshot);
+        return true;
+    }
+
+    private void handleDoneIntent(Intent intent, boolean showToast) {
+        int copied = intent.getIntExtra(CopyService.EXTRA_OK, 0);
+        int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
+        int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
+        int duplicates = intent.getIntExtra(CopyService.EXTRA_DUPLICATES, 0);
+        long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
+        String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
+        ArrayList<String> toDeleteStr = intent.getStringArrayListExtra(CopyService.EXTRA_TO_DELETE);
+
+        handleCopyFinished(copied, total, fail, duplicates, copiedBytes, error,
+                toDeleteStr == null ? new ArrayList<>() : toDeleteStr, showToast, false);
+    }
+
+    private void handleCopyFinished(int copied, int total, int fail, int duplicates,
+                                    long copiedBytes, @Nullable String error,
+                                    ArrayList<String> toDeleteStr, boolean showToast,
+                                    boolean deleteAlreadyRequested) {
+        ArrayList<Uri> toDelete = parseDeleteUris(toDeleteStr);
+        if (!TextUtils.isEmpty(error)) {
+            markProcessFinished(getString(R.string.process_failed_detail, error), true);
+            if (showToast) {
+                Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+
+        String resultText = buildFinalSummary(copied, total, fail, duplicates, copiedBytes);
+        if (SettingsStore.isDeleteAfter(MainActivity.this) && !toDelete.isEmpty()) {
+            pendingDeleteResultText = resultText;
+            copyRunning = true;
+            binding.btnTransfer.setEnabled(false);
+            binding.btnSettings.setEnabled(false);
+            binding.btnEjectHint.setVisibility(View.GONE);
+            setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
+                    PROGRESS_MAX, false, false);
+            if (!deleteAlreadyRequested) {
+                requestDeleteOriginals(toDelete);
+            }
+            return;
+        }
+
+        markProcessFinished(resultText, fail > 0);
+        if (showToast) {
+            Toast.makeText(MainActivity.this, resultText, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private ArrayList<Uri> parseDeleteUris(ArrayList<String> values) {
+        ArrayList<Uri> out = new ArrayList<>();
+        if (values == null) {
+            return out;
+        }
+        for (String value : values) {
+            if (!TextUtils.isEmpty(value)) {
+                out.add(Uri.parse(value));
+            }
+        }
+        return out;
     }
 
     private boolean ensureVideoPermission(boolean continueTransferAfterGrant) {
@@ -385,6 +434,7 @@ public class MainActivity extends AppCompatActivity {
         }
         if (!ensureNotificationPermission(true)) return;
 
+        OperationStateStore.clear(this);
         copyRunning = true;
         binding.btnTransfer.setEnabled(false);
         binding.btnSettings.setEnabled(false);
@@ -437,6 +487,19 @@ public class MainActivity extends AppCompatActivity {
                         currentName, currentBytes, currentTotalBytes, copiedBytes, totalBytes,
                         availableBytes, speed, error),
                 progress, indeterminate, stage == CopyService.STAGE_ERROR);
+    }
+
+    private void updateProcessFromSnapshot(OperationStateStore.Snapshot snapshot) {
+        int progress = calculateProgress(snapshot.stage, snapshot.done, snapshot.total,
+                snapshot.copiedBytes, snapshot.totalBytes);
+        boolean indeterminate = snapshot.stage == CopyService.STAGE_SEARCHING
+                || snapshot.stage == CopyService.STAGE_CHECKING_SPACE;
+        setProcessStage(getStageTitle(snapshot.stage, snapshot.done, snapshot.total),
+                buildStageDetail(snapshot.stage, snapshot.copied, snapshot.fail, snapshot.duplicates,
+                        snapshot.currentName, snapshot.currentBytes, snapshot.currentTotalBytes,
+                        snapshot.copiedBytes, snapshot.totalBytes, snapshot.availableBytes,
+                        snapshot.speedBytesPerSecond, snapshot.errorMessage),
+                progress, indeterminate, snapshot.stage == CopyService.STAGE_ERROR);
     }
 
     private int calculateProgress(int stage, int done, int total, long copiedBytes, long totalBytes) {
@@ -529,6 +592,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void markProcessFinished(String detail, boolean problem) {
+        OperationStateStore.markResultHandled(this);
         copyRunning = false;
         setProcessStage(getString(problem ? R.string.stage_problem : R.string.stage_done),
                 detail, problem ? 0 : PROGRESS_MAX, false, problem);
@@ -543,6 +607,7 @@ public class MainActivity extends AppCompatActivity {
                 IntentSender sender = MediaStore
                         .createDeleteRequest(getContentResolver(), toDelete)
                         .getIntentSender();
+                OperationStateStore.markDeleteRequestStarted(this);
                 deleteLauncher.launch(new IntentSenderRequest.Builder(sender).build());
             } catch (Exception e) {
                 markProcessFinished(getString(R.string.toast_delete_request_failed, e.getMessage()), true);
