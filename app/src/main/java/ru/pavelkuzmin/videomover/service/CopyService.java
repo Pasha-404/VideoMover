@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.text.TextUtils;
 
@@ -62,9 +63,11 @@ public class CopyService extends Service {
     private static final String CHANNEL_ID = "copy_channel";
     private static final int NOTIF_ID = 1;
     private static final long PROGRESS_UPDATE_INTERVAL_MS = 750L;
+    private static final long COPY_WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L;
 
     private NotificationManager notificationManager;
     private Thread workerThread;
+    private PowerManager.WakeLock copyWakeLock;
 
     @Override
     public void onCreate() {
@@ -106,6 +109,7 @@ public class CopyService extends Service {
                 getString(R.string.notif_title),
                 getString(R.string.stage_searching),
                 0, 0, true, true));
+        acquireCopyWakeLock();
 
         boolean useDcimAll = intent.getBooleanExtra(EXTRA_USE_DCIM_ALL, false);
         String relPrefix = intent.getStringExtra(EXTRA_REL_PREFIX);
@@ -234,6 +238,7 @@ public class CopyService extends Service {
             doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE, toDelete);
             sendBroadcast(doneIntent);
 
+            releaseCopyWakeLock();
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf(startId);
         }
@@ -341,6 +346,36 @@ public class CopyService extends Service {
         double mb = kb / 1024d;
         if (mb < 1024) return String.format(Locale.ROOT, "%.1f MB", mb);
         return String.format(Locale.ROOT, "%.2f GB", mb / 1024d);
+    }
+
+    private void acquireCopyWakeLock() {
+        if (copyWakeLock != null && copyWakeLock.isHeld()) {
+            return;
+        }
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager == null) {
+            return;
+        }
+        if (copyWakeLock == null) {
+            copyWakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "ru.pavelkuzmin.videomover:CopyService");
+            copyWakeLock.setReferenceCounted(false);
+        }
+        copyWakeLock.acquire(COPY_WAKE_LOCK_TIMEOUT_MS);
+    }
+
+    private void releaseCopyWakeLock() {
+        if (copyWakeLock != null && copyWakeLock.isHeld()) {
+            copyWakeLock.release();
+        }
+        copyWakeLock = null;
+    }
+
+    @Override
+    public void onDestroy() {
+        releaseCopyWakeLock();
+        super.onDestroy();
     }
 
     @Nullable

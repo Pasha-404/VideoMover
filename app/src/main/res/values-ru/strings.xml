@@ -66,6 +66,7 @@
     <string name="main_info_title">Настройки переноса</string>
     <string name="main_usb_ready">Доступ к накопителю готов</string>
     <string name="main_usb_missing">Выберите папку назначения</string>
+    <string name="main_usb_waiting">Ждём накопитель</string>
     <string name="main_search_all">Поиск: все папки камер</string>
     <string name="main_search_manual">Поиск: %1$s</string>
     <string name="main_search_manual_missing">Поиск: папка источника не выбрана</string>

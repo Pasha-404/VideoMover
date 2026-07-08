@@ -10,6 +10,9 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.view.View;
@@ -37,12 +40,18 @@ public class MainActivity extends AppCompatActivity {
     private static final int VIDEO_ACCESS_FULL = 1;
     private static final int VIDEO_ACCESS_PARTIAL = 2;
     private static final int PROGRESS_MAX = 1000;
+    private static final long DESTINATION_RECHECK_WINDOW_MS = 20_000L;
+    private static final long DESTINATION_RECHECK_INTERVAL_MS = 1_500L;
 
     private ActivityMainBinding binding;
     private boolean transferPendingAfterVideoPermission;
     private boolean transferPendingAfterNotificationPermission;
     private boolean copyRunning;
     private String pendingDeleteResultText;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable destinationRecheckRunnable = this::runDestinationRecheck;
+    private long destinationRecheckUntilMs;
+    private boolean destinationRecheckScheduled;
 
     private final ActivityResultLauncher<String[]> videoPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), results -> {
@@ -89,6 +98,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             copyRunning = true;
+            stopDestinationRecheck();
             binding.btnTransfer.setEnabled(false);
             binding.btnSettings.setEnabled(false);
             binding.btnEjectHint.setVisibility(View.GONE);
@@ -145,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(this, SettingsActivity.class)));
         binding.btnEjectHint.setOnClickListener(v -> showEjectInstruction());
 
-        refreshMainInfo(true);
+        refreshMainInfoAndStartDestinationRecheck(true);
         if (ensureVideoPermission(false)) {
             maybeAutodetectSourceOnFirstRun();
         }
@@ -161,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
                 new IntentFilter(CopyService.ACTION_DONE),
                 ContextCompat.RECEIVER_NOT_EXPORTED);
         if (!copyRunning) {
-            refreshMainInfo(true);
+            refreshMainInfoAndStartDestinationRecheck(true);
         }
     }
 
@@ -169,13 +179,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (!copyRunning) {
-            refreshMainInfo(true);
+            refreshMainInfoAndStartDestinationRecheck(true);
         }
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        stopDestinationRecheck();
         try {
             unregisterReceiver(progressReceiver);
         } catch (Exception ignore) {
@@ -252,7 +263,16 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private void refreshMainInfo(boolean resetProcess) {
+    private void refreshMainInfoAndStartDestinationRecheck(boolean resetProcess) {
+        boolean writable = refreshMainInfo(resetProcess);
+        if (writable || copyRunning || SettingsStore.getDestTreeUri(this) == null) {
+            stopDestinationRecheck();
+        } else {
+            startDestinationRecheckWindow();
+        }
+    }
+
+    private boolean refreshMainInfo(boolean resetProcess) {
         boolean deleteAfter = SettingsStore.isDeleteAfter(this);
         binding.btnTransfer.setText(deleteAfter ? R.string.transfer : R.string.copy_videos);
         binding.tvActionMode.setText(deleteAfter ? R.string.main_action_move : R.string.main_action_copy);
@@ -265,7 +285,7 @@ public class MainActivity extends AppCompatActivity {
             binding.tvFreeSpace.setText(R.string.main_free_space_unknown);
         } else {
             String summary = StorageUtil.buildDestSummary(this, uri);
-            writable = SafUtil.hasPersistedWritePermission(this, uri) && SafUtil.canWriteTree(this, uri);
+            writable = isDestinationWritable(uri);
             binding.tvDest.setText(writable ? summary : getString(R.string.dest_summary_no_access));
             long available = StorageUtil.getAvailableBytes(this, uri);
             binding.tvFreeSpace.setText(available >= 0
@@ -277,9 +297,10 @@ public class MainActivity extends AppCompatActivity {
         binding.tvStorageStatus.setBackgroundResource(writable
                 ? R.drawable.bg_status_ready
                 : R.drawable.bg_status_missing);
-        binding.tvStorageStatus.setText(writable
+        int storageStatusText = writable
                 ? R.string.main_usb_ready
-                : R.string.main_usb_missing);
+                : (uri == null ? R.string.main_usb_missing : R.string.main_usb_waiting);
+        binding.tvStorageStatus.setText(storageStatusText);
         binding.tvStorageStatus.setTextColor(ContextCompat.getColor(this,
                 writable ? R.color.vm_success : R.color.vm_text));
 
@@ -298,6 +319,48 @@ public class MainActivity extends AppCompatActivity {
                         getString(R.string.process_idle_detail));
             }
         }
+        return writable;
+    }
+
+    private boolean isDestinationWritable(@Nullable Uri uri) {
+        return uri != null
+                && SafUtil.hasPersistedWritePermission(this, uri)
+                && SafUtil.canWriteTree(this, uri);
+    }
+
+    private void startDestinationRecheckWindow() {
+        destinationRecheckUntilMs = SystemClock.elapsedRealtime() + DESTINATION_RECHECK_WINDOW_MS;
+        scheduleDestinationRecheck();
+    }
+
+    private void scheduleDestinationRecheck() {
+        if (destinationRecheckScheduled || copyRunning || SettingsStore.getDestTreeUri(this) == null) {
+            return;
+        }
+        destinationRecheckScheduled = true;
+        mainHandler.postDelayed(destinationRecheckRunnable, DESTINATION_RECHECK_INTERVAL_MS);
+    }
+
+    private void runDestinationRecheck() {
+        destinationRecheckScheduled = false;
+        if (copyRunning || binding == null) {
+            return;
+        }
+
+        boolean writable = refreshMainInfo(true);
+        if (writable || SettingsStore.getDestTreeUri(this) == null) {
+            stopDestinationRecheck();
+            return;
+        }
+
+        if (SystemClock.elapsedRealtime() < destinationRecheckUntilMs) {
+            scheduleDestinationRecheck();
+        }
+    }
+
+    private void stopDestinationRecheck() {
+        destinationRecheckScheduled = false;
+        mainHandler.removeCallbacks(destinationRecheckRunnable);
     }
 
     private String buildSearchModeText() {
@@ -325,17 +388,17 @@ public class MainActivity extends AppCompatActivity {
         Uri destTree = SettingsStore.getDestTreeUri(this);
         if (destTree == null) {
             Toast.makeText(this, getString(R.string.toast_pick_dest_first), Toast.LENGTH_LONG).show();
-            refreshMainInfo(true);
+            refreshMainInfoAndStartDestinationRecheck(true);
             return;
         }
-        if (!SafUtil.canWriteTree(this, destTree)) {
+        if (!isDestinationWritable(destTree)) {
             Toast.makeText(this, getString(R.string.no_write_access), Toast.LENGTH_LONG).show();
-            refreshMainInfo(true);
+            refreshMainInfoAndStartDestinationRecheck(true);
             return;
         }
         if (!isSourceModeReady()) {
             Toast.makeText(this, getString(R.string.toast_pick_source_first), Toast.LENGTH_LONG).show();
-            refreshMainInfo(true);
+            refreshMainInfoAndStartDestinationRecheck(true);
             return;
         }
         if (!ensureNotificationPermission(true)) return;

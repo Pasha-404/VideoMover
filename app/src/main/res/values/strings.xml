@@ -66,6 +66,7 @@
     <string name="main_info_title">Transfer setup</string>
     <string name="main_usb_ready">External storage access ready</string>
     <string name="main_usb_missing">Choose a destination folder</string>
+    <string name="main_usb_waiting">Waiting for the drive</string>
     <string name="main_search_all">Search: all camera folders</string>
     <string name="main_search_manual">Search: %1$s</string>
     <string name="main_search_manual_missing">Search: source folder is not selected</string>
