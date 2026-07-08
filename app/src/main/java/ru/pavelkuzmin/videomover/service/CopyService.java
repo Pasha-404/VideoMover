@@ -87,29 +87,42 @@ public class CopyService extends Service {
             int state = ContextCompat.checkSelfPermission(
                     this, android.Manifest.permission.POST_NOTIFICATIONS);
             if (state != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                stopSelf(startId);
+                stopWithError(startId, getString(R.string.service_error_notifications_denied));
                 return START_NOT_STICKY;
             }
         }
 
         String destUriStr = intent.getStringExtra(EXTRA_DEST_URI);
         if (TextUtils.isEmpty(destUriStr)) {
-            stopSelf(startId);
+            stopWithError(startId, getString(R.string.service_error_destination_missing));
             return START_NOT_STICKY;
         }
 
-        Uri destTree = Uri.parse(destUriStr);
-        DocumentFile destDir = DocumentFile.fromTreeUri(this, destTree);
+        Uri destTree;
+        DocumentFile destDir;
+        try {
+            destTree = Uri.parse(destUriStr);
+            destDir = DocumentFile.fromTreeUri(this, destTree);
+        } catch (Exception e) {
+            stopWithError(startId, e.getClass().getSimpleName() + ": " + e.getMessage());
+            return START_NOT_STICKY;
+        }
         if (destDir == null || !destDir.canWrite()) {
-            stopSelf(startId);
+            stopWithError(startId, getString(R.string.no_write_access));
             return START_NOT_STICKY;
         }
 
-        startForeground(NOTIF_ID, buildNotification(
-                getString(R.string.notif_title),
-                getString(R.string.stage_searching),
-                0, 0, true, true));
-        acquireCopyWakeLock();
+        try {
+            startForeground(NOTIF_ID, buildNotification(
+                    getString(R.string.notif_title),
+                    getString(R.string.stage_searching),
+                    0, 0, true, true));
+            acquireCopyWakeLock();
+        } catch (Exception e) {
+            releaseCopyWakeLock();
+            stopWithError(startId, e.getClass().getSimpleName() + ": " + e.getMessage());
+            return START_NOT_STICKY;
+        }
 
         boolean useDcimAll = intent.getBooleanExtra(EXTRA_USE_DCIM_ALL, false);
         String relPrefix = intent.getStringExtra(EXTRA_REL_PREFIX);
@@ -118,6 +131,23 @@ public class CopyService extends Service {
         workerThread.start();
 
         return START_NOT_STICKY;
+    }
+
+    private void stopWithError(int startId, String errorMessage) {
+        Intent doneIntent = new Intent(ACTION_DONE);
+        doneIntent.setPackage(getPackageName());
+        doneIntent.putExtra(EXTRA_STAGE, STAGE_ERROR);
+        doneIntent.putExtra(EXTRA_TOTAL, 0);
+        doneIntent.putExtra(EXTRA_FAIL, 0);
+        doneIntent.putExtra(EXTRA_OK, 0);
+        doneIntent.putExtra(EXTRA_DUPLICATES, 0);
+        doneIntent.putExtra(EXTRA_COPIED_BYTES, 0L);
+        doneIntent.putExtra(EXTRA_TOTAL_BYTES, 0L);
+        doneIntent.putExtra(EXTRA_AVAILABLE_BYTES, -1L);
+        doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE, new ArrayList<>());
+        doneIntent.putExtra(EXTRA_ERROR_MESSAGE, errorMessage);
+        sendBroadcast(doneIntent);
+        stopSelf(startId);
     }
 
     private void runCopy(int startId, Uri destTree, DocumentFile destDir,

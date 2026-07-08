@@ -10,6 +10,11 @@
             android:title="@string/pref_dest_title"
             android:summary="@string/pref_dest_summary" />
 
+        <Preference
+            android:key="pref_video_access"
+            android:title="@string/pref_video_access_title"
+            android:summary="@string/pref_video_access_denied" />
+
         <SwitchPreferenceCompat
             android:key="pref_use_dcim_all"
             android:title="@string/pref_use_dcim_all_title"

@@ -10,6 +10,10 @@
     <string name="pref_category_io">Пути</string>
     <string name="pref_dest_title">Папка назначения</string>
     <string name="pref_dest_summary">Текущая: %1$s</string>
+    <string name="pref_video_access_title">Доступ к видео</string>
+    <string name="pref_video_access_full">Разрешён доступ ко всем видео.</string>
+    <string name="pref_video_access_partial">Доступ ограничен выбранными видео. VideoMover может не найти часть видео с камеры.</string>
+    <string name="pref_video_access_denied">Доступ к видео не разрешён. Перенос невозможен.</string>
     <string name="pref_source_title">Папка источника</string>
     <string name="pref_detect_source_title">Определить источник автоматически</string>
     <string name="pref_detect_source_summary">Найти типичную папку камеры, например DCIM/Camera</string>
@@ -72,6 +76,9 @@
     <string name="main_search_manual_missing">Поиск: папка источника не выбрана</string>
     <string name="main_action_move">Режим: перенос, оригиналы удаляются после копирования</string>
     <string name="main_action_copy">Режим: копирование, оригиналы остаются на телефоне</string>
+    <string name="main_video_access_full">Доступ к видео: все видео</string>
+    <string name="main_video_access_partial">Доступ к видео: только выбранные</string>
+    <string name="main_video_access_denied">Доступ к видео: не разрешён</string>
     <string name="main_free_space">Свободно: %1$s</string>
     <string name="main_free_space_unknown">Свободное место: неизвестно</string>
 
@@ -105,6 +112,8 @@
     <string name="process_delete_done">%1$s\nОригиналы удалены.</string>
     <string name="process_delete_canceled">%1$s\nУдаление оригиналов отменено.</string>
     <string name="error_not_enough_space">Недостаточно свободного места. Нужно: %1$s, свободно: %2$s.</string>
+    <string name="service_error_notifications_denied">Уведомления не разрешены. Нельзя показать ход копирования.</string>
+    <string name="service_error_destination_missing">Папка назначения не выбрана.</string>
     <string name="eject_ready_button">Готово, можно извлечь флешку</string>
     <string name="eject_ready_title">Накопитель больше не используется</string>
     <string name="eject_ready_message">VideoMover завершил копирование и закрыл файлы. Если в Android есть пункт безопасного извлечения этой флешки, используйте его сейчас. Если такого пункта нет, подождите несколько секунд и отключите флешку.</string>

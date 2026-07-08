@@ -34,11 +34,9 @@ import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
 import ru.pavelkuzmin.videomover.service.CopyService;
 import ru.pavelkuzmin.videomover.util.SafUtil;
 import ru.pavelkuzmin.videomover.util.StorageUtil;
+import ru.pavelkuzmin.videomover.util.VideoPermissionUtil;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int VIDEO_ACCESS_DENIED = 0;
-    private static final int VIDEO_ACCESS_FULL = 1;
-    private static final int VIDEO_ACCESS_PARTIAL = 2;
     private static final int PROGRESS_MAX = 1000;
     private static final long DESTINATION_RECHECK_WINDOW_MS = 20_000L;
     private static final long DESTINATION_RECHECK_INTERVAL_MS = 1_500L;
@@ -55,8 +53,9 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<String[]> videoPermLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), results -> {
-                int accessState = getVideoAccessState();
-                if (accessState == VIDEO_ACCESS_DENIED) {
+                int accessState = VideoPermissionUtil.getAccessState(this);
+                refreshMainInfoAndStartDestinationRecheck(true);
+                if (accessState == VideoPermissionUtil.ACCESS_DENIED) {
                     transferPendingAfterVideoPermission = false;
                     Toast.makeText(this, getString(R.string.perm_video_rationale), Toast.LENGTH_LONG).show();
                     return;
@@ -198,54 +197,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean ensureVideoPermission(boolean continueTransferAfterGrant) {
-        int accessState = getVideoAccessState();
-        if (accessState != VIDEO_ACCESS_DENIED) {
-            if (continueTransferAfterGrant && accessState == VIDEO_ACCESS_PARTIAL) {
+        int accessState = VideoPermissionUtil.getAccessState(this);
+        if (accessState != VideoPermissionUtil.ACCESS_DENIED) {
+            if (continueTransferAfterGrant && accessState == VideoPermissionUtil.ACCESS_PARTIAL) {
                 Toast.makeText(this, getString(R.string.perm_video_partial), Toast.LENGTH_LONG).show();
             }
             return true;
         }
 
         transferPendingAfterVideoPermission = continueTransferAfterGrant;
-        videoPermLauncher.launch(getVideoPermissionsToRequest());
+        videoPermLauncher.launch(VideoPermissionUtil.getPermissionsToRequest());
         return false;
     }
 
-    private int getVideoAccessState() {
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (isPermissionGranted(Manifest.permission.READ_MEDIA_VIDEO)) {
-                return VIDEO_ACCESS_FULL;
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-                    && isPermissionGranted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)) {
-                return VIDEO_ACCESS_PARTIAL;
-            }
-            return VIDEO_ACCESS_DENIED;
-        }
-        return isPermissionGranted(Manifest.permission.READ_EXTERNAL_STORAGE)
-                ? VIDEO_ACCESS_FULL
-                : VIDEO_ACCESS_DENIED;
-    }
-
-    private String[] getVideoPermissionsToRequest() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            return new String[]{
-                    Manifest.permission.READ_MEDIA_VIDEO,
-                    Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-            };
-        }
-        if (Build.VERSION.SDK_INT >= 33) {
-            return new String[]{Manifest.permission.READ_MEDIA_VIDEO};
-        }
-        return new String[]{Manifest.permission.READ_EXTERNAL_STORAGE};
-    }
-
-    private boolean isPermissionGranted(String permission) {
-        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED;
-    }
-
     private void showVideoPermissionGrantedToast(int accessState) {
-        int message = accessState == VIDEO_ACCESS_PARTIAL
+        int message = accessState == VideoPermissionUtil.ACCESS_PARTIAL
                 ? R.string.perm_video_partial
                 : R.string.perm_video_granted;
         Toast.makeText(this, getString(message), Toast.LENGTH_SHORT).show();
@@ -277,6 +243,12 @@ public class MainActivity extends AppCompatActivity {
         binding.btnTransfer.setText(deleteAfter ? R.string.transfer : R.string.copy_videos);
         binding.tvActionMode.setText(deleteAfter ? R.string.main_action_move : R.string.main_action_copy);
         binding.tvSearchMode.setText(buildSearchModeText());
+        int videoAccessState = VideoPermissionUtil.getAccessState(this);
+        binding.tvVideoAccess.setText(getVideoAccessStatusText(videoAccessState));
+        binding.tvVideoAccess.setTextColor(ContextCompat.getColor(this,
+                videoAccessState == VideoPermissionUtil.ACCESS_FULL
+                        ? R.color.vm_text_muted
+                        : R.color.vm_warning));
 
         Uri uri = SettingsStore.getDestTreeUri(this);
         boolean writable = false;
@@ -320,6 +292,16 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return writable;
+    }
+
+    private String getVideoAccessStatusText(int accessState) {
+        if (accessState == VideoPermissionUtil.ACCESS_FULL) {
+            return getString(R.string.main_video_access_full);
+        }
+        if (accessState == VideoPermissionUtil.ACCESS_PARTIAL) {
+            return getString(R.string.main_video_access_partial);
+        }
+        return getString(R.string.main_video_access_denied);
     }
 
     private boolean isDestinationWritable(@Nullable Uri uri) {
@@ -423,7 +405,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        ContextCompat.startForegroundService(this, service);
+        try {
+            ContextCompat.startForegroundService(this, service);
+        } catch (Exception e) {
+            copyRunning = false;
+            binding.btnSettings.setEnabled(true);
+            markProcessFinished(getString(R.string.process_failed_detail,
+                    e.getClass().getSimpleName() + ": " + e.getMessage()), true);
+        }
     }
 
     private void updateProcessFromProgress(Intent intent) {

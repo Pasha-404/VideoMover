@@ -4,10 +4,8 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.TextUtils;
@@ -19,7 +17,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -33,6 +30,7 @@ import ru.pavelkuzmin.videomover.data.MediaQuery;
 import ru.pavelkuzmin.videomover.data.SettingsStore;
 import ru.pavelkuzmin.videomover.util.SafUtil;
 import ru.pavelkuzmin.videomover.util.StorageUtil;
+import ru.pavelkuzmin.videomover.util.VideoPermissionUtil;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -75,6 +73,7 @@ public class SettingsActivity extends AppCompatActivity {
         private static final int SOURCE_RESULT_LIMIT = 25;
 
         private Preference prefDest;
+        private Preference prefVideoAccess;
         private Preference prefSourceDetect;
         private Preference prefSourcePickList;
         private Preference prefSourcePickVideo;
@@ -92,6 +91,7 @@ public class SettingsActivity extends AppCompatActivity {
             setPreferencesFromResource(R.xml.prefs, rootKey);
 
             prefDest = findPreference("pref_dest");
+            prefVideoAccess = findPreference("pref_video_access");
             prefSourceDetect = findPreference("pref_source_detect");
             prefSourcePickList = findPreference("pref_source_pick_list");
             prefSourcePickVideo = findPreference("pref_source_pick_video");
@@ -102,8 +102,15 @@ public class SettingsActivity extends AppCompatActivity {
             registerLaunchers();
             bindPreferences();
             updateDestSummary();
+            updateVideoAccessSummary();
             updateSourceRelSummary();
             applyUseDcimAllEnabledState(SettingsStore.isUseDcimAll(requireContext()));
+        }
+
+        @Override
+        public void onResume() {
+            super.onResume();
+            updateVideoAccessSummary();
         }
 
         private void registerLaunchers() {
@@ -153,6 +160,7 @@ public class SettingsActivity extends AppCompatActivity {
                         } else if (!granted) {
                             toast(getString(R.string.permission_media_denied));
                         }
+                        updateVideoAccessSummary();
                         pendingAfterPermission = null;
                     });
         }
@@ -161,6 +169,14 @@ public class SettingsActivity extends AppCompatActivity {
             if (prefDest != null) {
                 prefDest.setOnPreferenceClickListener(p -> {
                     openTreeLauncher.launch(SafUtil.createOpenTreeIntent());
+                    return true;
+                });
+            }
+
+            if (prefVideoAccess != null) {
+                prefVideoAccess.setOnPreferenceClickListener(p -> {
+                    pendingAfterPermission = null;
+                    permLauncher.launch(VideoPermissionUtil.getPermissionsToRequest());
                     return true;
                 });
             }
@@ -244,26 +260,11 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private String[] requiredMediaPermissions() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                return new String[]{
-                        android.Manifest.permission.READ_MEDIA_VIDEO,
-                        android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-                };
-            }
-            if (Build.VERSION.SDK_INT >= 33) {
-                return new String[]{android.Manifest.permission.READ_MEDIA_VIDEO};
-            }
-            return new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE};
+            return VideoPermissionUtil.getPermissionsToRequest();
         }
 
         private boolean hasAnyMediaPermission() {
-            for (String permission : requiredMediaPermissions()) {
-                if (ContextCompat.checkSelfPermission(requireContext(), permission)
-                        == PackageManager.PERMISSION_GRANTED) {
-                    return true;
-                }
-            }
-            return false;
+            return VideoPermissionUtil.hasAnyAccess(requireContext());
         }
 
         private void ensureMediaPermission(Runnable afterGranted) {
@@ -282,6 +283,18 @@ public class SettingsActivity extends AppCompatActivity {
                 prefDest.setSummary(getString(R.string.pref_dest_summary, ""));
             } else {
                 prefDest.setSummary(StorageUtil.buildDestSummary(requireContext(), dest));
+            }
+        }
+
+        private void updateVideoAccessSummary() {
+            if (prefVideoAccess == null) return;
+            int state = VideoPermissionUtil.getAccessState(requireContext());
+            if (state == VideoPermissionUtil.ACCESS_FULL) {
+                prefVideoAccess.setSummary(R.string.pref_video_access_full);
+            } else if (state == VideoPermissionUtil.ACCESS_PARTIAL) {
+                prefVideoAccess.setSummary(R.string.pref_video_access_partial);
+            } else {
+                prefVideoAccess.setSummary(R.string.pref_video_access_denied);
             }
         }
 

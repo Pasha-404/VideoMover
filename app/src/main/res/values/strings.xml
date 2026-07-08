@@ -10,6 +10,10 @@
     <string name="pref_category_io">Paths</string>
     <string name="pref_dest_title">Destination folder</string>
     <string name="pref_dest_summary">Current: %1$s</string>
+    <string name="pref_video_access_title">Video access</string>
+    <string name="pref_video_access_full">Access to all videos is allowed.</string>
+    <string name="pref_video_access_partial">Access is limited to selected videos. VideoMover may not find some camera videos.</string>
+    <string name="pref_video_access_denied">Video access is not allowed. Moving videos is unavailable.</string>
     <string name="pref_source_title">Source folder</string>
     <string name="pref_detect_source_title">Detect source automatically</string>
     <string name="pref_detect_source_summary">Find a typical camera folder such as DCIM/Camera</string>
@@ -72,6 +76,9 @@
     <string name="main_search_manual_missing">Search: source folder is not selected</string>
     <string name="main_action_move">Mode: move, originals are deleted after copying</string>
     <string name="main_action_copy">Mode: copy, originals stay on the phone</string>
+    <string name="main_video_access_full">Video access: all videos</string>
+    <string name="main_video_access_partial">Video access: selected videos only</string>
+    <string name="main_video_access_denied">Video access: not allowed</string>
     <string name="main_free_space">Free space: %1$s</string>
     <string name="main_free_space_unknown">Free space: unknown</string>
 
@@ -105,6 +112,8 @@
     <string name="process_delete_done">%1$s\nOriginals were deleted.</string>
     <string name="process_delete_canceled">%1$s\nOriginal deletion was canceled.</string>
     <string name="error_not_enough_space">Not enough free space. Required: %1$s, free: %2$s.</string>
+    <string name="service_error_notifications_denied">Notifications are not allowed. Copy progress cannot be shown.</string>
+    <string name="service_error_destination_missing">Destination folder is not selected.</string>
     <string name="eject_ready_button">Done, you can unplug the drive</string>
     <string name="eject_ready_title">Drive is no longer in use</string>
     <string name="eject_ready_message">VideoMover has finished copying and closed its files. If your Android system has a safe eject item for this USB drive, use it now. Otherwise, wait a few seconds and unplug the drive.</string>
