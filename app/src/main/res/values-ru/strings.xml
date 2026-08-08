@@ -5,6 +5,8 @@
     <string name="dest_not_selected">Папка назначения: не выбрана</string>
     <string name="transfer">Перенести видео</string>
     <string name="copy_videos">Копировать видео</string>
+    <string name="stop_transfer">Остановить</string>
+    <string name="stop_transfer_pending">Останавливаю...</string>
     <string name="settings">Настройки</string>
 
     <string name="pref_category_io">Пути</string>
@@ -37,6 +39,7 @@
     <string name="notif_copy_in_progress">Копирование&#8230; %1$d из %2$d</string>
     <string name="notif_copy_current_file">Копирование %1$d из %2$d: %3$s</string>
     <string name="notif_copy_done">Копирование завершено</string>
+    <string name="notif_copy_canceled">Копирование остановлено</string>
 
     <string name="pref_use_dcim_all_title">Искать во всех папках камер</string>
     <string name="pref_use_dcim_all_summary">Сканировать все подпапки DCIM. Когда включено, точный выбор источника отключается.</string>
@@ -89,6 +92,8 @@
     <string name="stage_deleting">Удаляю оригиналы</string>
     <string name="stage_done">Готово</string>
     <string name="stage_problem">Нужно внимание</string>
+    <string name="stage_stopping">Останавливаю</string>
+    <string name="stage_canceled">Остановлено</string>
 
     <string name="process_idle_move_title">Готов к переносу</string>
     <string name="process_idle_copy_title">Готов к копированию</string>
@@ -108,12 +113,17 @@
     <string name="process_done_with_duplicates">Скопировано: %1$d · дубликаты пропущены: %2$d · данные: %3$s.</string>
     <string name="process_done_with_errors">Скопировано: %1$d · дубликаты: %2$d · ошибки: %3$d · данные: %4$s.</string>
     <string name="process_failed_detail">Проблема: %1$s</string>
+    <string name="process_stopping_detail">Завершаю текущую запись и очищаю временный файл.</string>
+    <string name="process_canceled_detail">Остановлено. Скопировано: %1$d из %2$d · данные: %3$s. Оригиналы не удалялись.</string>
     <string name="process_delete_request_detail">Android попросит подтвердить удаление оригиналов с телефона.</string>
     <string name="process_delete_done">%1$s\nОригиналы удалены.</string>
     <string name="process_delete_canceled">%1$s\nУдаление оригиналов отменено.</string>
     <string name="error_not_enough_space">Недостаточно свободного места. Нужно: %1$s, свободно: %2$s.</string>
+    <string name="error_not_enough_space_remaining">Во время копирования закончилось место. Осталось скопировать: %1$s, свободно: %2$s.</string>
+    <string name="error_destination_failure_streak">Накопитель дал %1$d ошибок записи подряд. Копирование остановлено, чтобы не получить сотни одинаковых ошибок.</string>
     <string name="service_error_notifications_denied">Уведомления не разрешены. Нельзя показать ход копирования.</string>
     <string name="service_error_destination_missing">Папка назначения не выбрана.</string>
+    <string name="toast_stop_failed">Не удалось остановить копирование: %1$s</string>
     <string name="eject_ready_button">Готово, можно извлечь флешку</string>
     <string name="eject_ready_title">Накопитель больше не используется</string>
     <string name="eject_ready_message">VideoMover завершил копирование и закрыл файлы. Если в Android есть пункт безопасного извлечения этой флешки, используйте его сейчас. Если такого пункта нет, подождите несколько секунд и отключите флешку.</string>
@@ -128,4 +138,21 @@
     <string name="filecopier_err_create_temp">Не удалось создать временный файл</string>
     <string name="filecopier_err_size_mismatch">Размер не совпал</string>
     <string name="filecopier_err_rename_failed">Не удалось переименовать файл</string>
+    <string name="filecopier_err_unknown">Неизвестная ошибка копирования</string>
+    <string name="error_report_button">Показать ошибки</string>
+    <string name="error_report_title">Ошибки копирования</string>
+    <string name="error_report_empty">Подробный отчёт об ошибках не сохранён.</string>
+    <string name="error_report_item">%1$d/%2$d · %3$s · %4$s · %5$s · %6$s: %7$s</string>
+    <string name="error_report_omitted">…%1$d похожих ошибок пропущено…</string>
+    <string name="error_stage_dest_access">проверка доступа к накопителю</string>
+    <string name="error_stage_dest_create_temp">создание временного файла на накопителе</string>
+    <string name="error_stage_source_open">открытие исходного видео</string>
+    <string name="error_stage_dest_open_temp">открытие временного файла на накопителе</string>
+    <string name="error_stage_source_read">чтение исходного видео</string>
+    <string name="error_stage_dest_write">запись на накопитель</string>
+    <string name="error_stage_dest_flush">сброс буфера записи</string>
+    <string name="error_stage_dest_sync">синхронизация файла с накопителем</string>
+    <string name="error_stage_verify_size">проверка размера копии</string>
+    <string name="error_stage_dest_rename">переименование временного файла</string>
+    <string name="error_stage_unknown">неизвестный этап</string>
 </resources>

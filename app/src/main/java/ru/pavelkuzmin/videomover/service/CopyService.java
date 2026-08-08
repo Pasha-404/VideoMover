@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,7 @@ import ru.pavelkuzmin.videomover.util.StorageUtil;
 
 public class CopyService extends Service {
     public static final String ACTION_START = "ru.pavelkuzmin.videomover.action.START_COPY";
+    public static final String ACTION_CANCEL = "ru.pavelkuzmin.videomover.action.CANCEL_COPY";
     public static final String ACTION_PROGRESS = "ru.pavelkuzmin.videomover.action.COPY_PROGRESS";
     public static final String ACTION_DONE = "ru.pavelkuzmin.videomover.action.COPY_DONE";
 
@@ -53,6 +55,7 @@ public class CopyService extends Service {
     public static final String EXTRA_AVAILABLE_BYTES = "extra_available_bytes";
     public static final String EXTRA_SPEED_BYTES_PER_SECOND = "extra_speed_bytes_per_second";
     public static final String EXTRA_ERROR_MESSAGE = "extra_error_message";
+    public static final String EXTRA_ERROR_REPORT = "extra_error_report";
 
     public static final int STAGE_SEARCHING = 1;
     public static final int STAGE_CHECKING_SPACE = 2;
@@ -60,15 +63,20 @@ public class CopyService extends Service {
     public static final int STAGE_VERIFYING = 4;
     public static final int STAGE_DONE = 5;
     public static final int STAGE_ERROR = 6;
+    public static final int STAGE_STOPPING = 7;
+    public static final int STAGE_CANCELED = 8;
 
     private static final String CHANNEL_ID = "copy_channel";
     private static final int NOTIF_ID = 1;
     private static final long PROGRESS_UPDATE_INTERVAL_MS = 750L;
     private static final long COPY_WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L;
+    private static final int DESTINATION_ERROR_STREAK_LIMIT = 8;
+    private static final int SPACE_RECHECK_FILE_INTERVAL = 10;
 
     private NotificationManager notificationManager;
     private Thread workerThread;
     private PowerManager.WakeLock copyWakeLock;
+    private volatile boolean cancelRequested;
 
     @Override
     public void onCreate() {
@@ -79,10 +87,19 @@ public class CopyService extends Service {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
-        if (intent == null || !ACTION_START.equals(intent.getAction())) {
+        String action = intent == null ? null : intent.getAction();
+        if (ACTION_CANCEL.equals(action)) {
+            requestCancel(startId);
+            return START_NOT_STICKY;
+        }
+        if (!ACTION_START.equals(action)) {
             stopSelf(startId);
             return START_NOT_STICKY;
         }
+        if (workerThread != null && workerThread.isAlive()) {
+            return START_NOT_STICKY;
+        }
+        cancelRequested = false;
 
         if (Build.VERSION.SDK_INT >= 33) {
             int state = ContextCompat.checkSelfPermission(
@@ -134,6 +151,21 @@ public class CopyService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void requestCancel(int startId) {
+        cancelRequested = true;
+        Thread thread = workerThread;
+        if (thread != null) {
+            thread.interrupt();
+        }
+        notificationManager.notify(NOTIF_ID, buildNotification(
+                getString(R.string.notif_title),
+                getString(R.string.stage_stopping),
+                0, 0, true, true));
+        if (thread == null || !thread.isAlive()) {
+            stopSelf(startId);
+        }
+    }
+
     private void stopWithError(int startId, String errorMessage) {
         OperationStateStore.saveFinished(this, STAGE_ERROR, 0, 0, 0, 0,
                 0L, 0L, -1L, errorMessage, new ArrayList<>());
@@ -150,6 +182,7 @@ public class CopyService extends Service {
         doneIntent.putExtra(EXTRA_AVAILABLE_BYTES, -1L);
         doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE, new ArrayList<>());
         doneIntent.putExtra(EXTRA_ERROR_MESSAGE, errorMessage);
+        doneIntent.putStringArrayListExtra(EXTRA_ERROR_REPORT, new ArrayList<>());
         sendBroadcast(doneIntent);
         stopSelf(startId);
     }
@@ -165,6 +198,9 @@ public class CopyService extends Service {
         long totalBytes = 0L;
         long availableBytes = -1L;
         String fatalError = null;
+        boolean canceled = false;
+        ErrorReport errorReport = new ErrorReport();
+        int destinationErrorStreak = 0;
 
         try {
             sendProgress(STAGE_SEARCHING, 0, 0, copied[0], fail[0], duplicates[0],
@@ -180,6 +216,13 @@ public class CopyService extends Service {
             sendProgress(STAGE_CHECKING_SPACE, 0, total, copied[0], fail[0], duplicates[0],
                     null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
 
+            if (isCancelRequested()) {
+                canceled = true;
+                sendProgress(STAGE_STOPPING, 0, total, copied[0], fail[0], duplicates[0],
+                        null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
+                return;
+            }
+
             if (availableBytes >= 0 && totalBytes > availableBytes) {
                 fatalError = getString(R.string.error_not_enough_space,
                         formatBytes(totalBytes), formatBytes(availableBytes));
@@ -190,8 +233,15 @@ public class CopyService extends Service {
             }
 
             final long requiredBytesForProgress = totalBytes;
-            final long availableBytesForProgress = availableBytes;
+            final long[] availableBytesForProgress = {availableBytes};
             for (int index = 0; index < total; index++) {
+                if (isCancelRequested()) {
+                    canceled = true;
+                    sendProgress(STAGE_STOPPING, index, total, copied[0], fail[0], duplicates[0],
+                            null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
+                    break;
+                }
+
                 MediaQuery.VideoItem item = items.get(index);
                 int doneBeforeCurrent = index;
                 long[] lastProgressUpdate = {0L};
@@ -219,11 +269,19 @@ public class CopyService extends Service {
                                 sendProgress(stage, doneBeforeCurrent, total, copied[0], fail[0], duplicates[0],
                                         item.displayName, writtenBytes, currentTotalBytes,
                                         copiedBytes[0] + writtenBytes, requiredBytesForProgress,
-                                        availableBytesForProgress, speed, null);
+                                        availableBytesForProgress[0], speed, null);
                             }
-                        });
+                        },
+                        this::isCancelRequested);
 
-                if (result.ok) {
+                if (result.canceled) {
+                    canceled = true;
+                    sendProgress(STAGE_STOPPING, doneBeforeCurrent, total, copied[0], fail[0], duplicates[0],
+                            item.displayName, result.bytes, item.size, copiedBytes[0],
+                            totalBytes, availableBytes, 0, null);
+                    break;
+                } else if (result.ok) {
+                    destinationErrorStreak = 0;
                     if (result.duplicate) {
                         duplicates[0]++;
                     } else {
@@ -233,32 +291,82 @@ public class CopyService extends Service {
                     }
                 } else {
                     fail[0]++;
+                    addErrorReport(errorReport, index, total, item, result);
+                    if (result.destinationIssue) {
+                        destinationErrorStreak++;
+                    } else {
+                        destinationErrorStreak = 0;
+                    }
+                    if (destinationErrorStreak >= DESTINATION_ERROR_STREAK_LIMIT) {
+                        fatalError = getString(R.string.error_destination_failure_streak,
+                                destinationErrorStreak);
+                        int remaining = Math.max(0, total - index - 1);
+                        fail[0] += remaining;
+                        sendProgress(STAGE_ERROR, index + 1, total, copied[0], fail[0], duplicates[0],
+                                item.displayName, item.size, item.size, copiedBytes[0],
+                                totalBytes, availableBytes, 0, fatalError);
+                        return;
+                    }
                 }
 
                 int done = index + 1;
                 sendProgress(STAGE_VERIFYING, done, total, copied[0], fail[0], duplicates[0],
                         item.displayName, item.size, item.size, copiedBytes[0],
                         totalBytes, availableBytes, 0, result.error);
+
+                if (shouldRecheckSpace(index, result)) {
+                    long refreshedAvailable = StorageUtil.getAvailableBytes(this, destTree);
+                    if (refreshedAvailable >= 0) {
+                        availableBytes = refreshedAvailable;
+                        availableBytesForProgress[0] = refreshedAvailable;
+                        long remainingBytes = sumKnownSizesFrom(items, done);
+                        if (remainingBytes > refreshedAvailable) {
+                            fatalError = getString(R.string.error_not_enough_space_remaining,
+                                    formatBytes(remainingBytes), formatBytes(refreshedAvailable));
+                            int remaining = Math.max(0, total - done);
+                            fail[0] += remaining;
+                            sendProgress(STAGE_ERROR, done, total, copied[0], fail[0], duplicates[0],
+                                    item.displayName, item.size, item.size, copiedBytes[0],
+                                    totalBytes, availableBytes, 0, fatalError);
+                            return;
+                        }
+                    }
+                }
             }
 
-            sendProgress(STAGE_DONE, items.size(), items.size(), copied[0], fail[0], duplicates[0],
-                    null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
+            if (!canceled) {
+                sendProgress(STAGE_DONE, items.size(), items.size(), copied[0], fail[0], duplicates[0],
+                        null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
+            }
         } catch (Exception e) {
-            fatalError = e.getClass().getSimpleName() + ": " + e.getMessage();
-            sendProgress(STAGE_ERROR, 0, items.size(), copied[0], fail[0], duplicates[0],
-                    null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, fatalError);
+            if (isCancelRequested()) {
+                canceled = true;
+                sendProgress(STAGE_STOPPING, 0, items.size(), copied[0], fail[0], duplicates[0],
+                        null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, null);
+            } else {
+                fatalError = e.getClass().getSimpleName() + ": " + e.getMessage();
+                sendProgress(STAGE_ERROR, 0, items.size(), copied[0], fail[0], duplicates[0],
+                        null, 0, 0, copiedBytes[0], totalBytes, availableBytes, 0, fatalError);
+            }
         } finally {
             int total = items.size();
+            int terminalStage = canceled
+                    ? STAGE_CANCELED
+                    : (TextUtils.isEmpty(fatalError) ? STAGE_DONE : STAGE_ERROR);
+            String notificationText = getString(R.string.notif_copy_done);
+            if (terminalStage == STAGE_CANCELED) {
+                notificationText = getString(R.string.notif_copy_canceled);
+            } else if (terminalStage == STAGE_ERROR) {
+                notificationText = getString(R.string.stage_problem);
+            }
             notificationManager.notify(NOTIF_ID, buildNotification(
                     getString(R.string.notif_title),
-                    getString(TextUtils.isEmpty(fatalError)
-                            ? R.string.notif_copy_done
-                            : R.string.stage_problem),
+                    notificationText,
                     total, total, false, false));
 
             Intent doneIntent = new Intent(ACTION_DONE);
             doneIntent.setPackage(getPackageName());
-            doneIntent.putExtra(EXTRA_STAGE, TextUtils.isEmpty(fatalError) ? STAGE_DONE : STAGE_ERROR);
+            doneIntent.putExtra(EXTRA_STAGE, terminalStage);
             doneIntent.putExtra(EXTRA_TOTAL, total);
             doneIntent.putExtra(EXTRA_FAIL, fail[0]);
             doneIntent.putExtra(EXTRA_OK, copied[0]);
@@ -269,22 +377,34 @@ public class CopyService extends Service {
             if (!TextUtils.isEmpty(fatalError)) {
                 doneIntent.putExtra(EXTRA_ERROR_MESSAGE, fatalError);
             }
-            doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE, toDelete);
+            doneIntent.putStringArrayListExtra(EXTRA_TO_DELETE,
+                    terminalStage == STAGE_CANCELED ? new ArrayList<>() : toDelete);
+            ArrayList<String> errorReportLines = buildErrorReportLines(errorReport);
+            doneIntent.putStringArrayListExtra(EXTRA_ERROR_REPORT, errorReportLines);
             OperationStateStore.saveFinished(this,
-                    TextUtils.isEmpty(fatalError) ? STAGE_DONE : STAGE_ERROR,
+                    terminalStage,
                     total, copied[0], fail[0], duplicates[0], copiedBytes[0],
-                    totalBytes, availableBytes, fatalError, toDelete);
+                    totalBytes, availableBytes, fatalError,
+                    terminalStage == STAGE_CANCELED ? new ArrayList<>() : toDelete,
+                    errorReportLines);
             sendBroadcast(doneIntent);
 
             releaseCopyWakeLock();
+            cancelRequested = false;
+            workerThread = null;
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf(startId);
         }
     }
 
     private long sumKnownSizes(List<MediaQuery.VideoItem> items) {
+        return sumKnownSizesFrom(items, 0);
+    }
+
+    private long sumKnownSizesFrom(List<MediaQuery.VideoItem> items, int startIndex) {
         long total = 0L;
-        for (MediaQuery.VideoItem item : items) {
+        for (int index = Math.max(0, startIndex); index < items.size(); index++) {
+            MediaQuery.VideoItem item = items.get(index);
             if (item.size > 0) {
                 total += item.size;
             }
@@ -292,12 +412,88 @@ public class CopyService extends Service {
         return total;
     }
 
+    private boolean shouldRecheckSpace(int index, FileCopier.Result result) {
+        return result.destinationIssue
+                || (index + 1) % SPACE_RECHECK_FILE_INTERVAL == 0;
+    }
+
+    private void addErrorReport(ErrorReport report, int index, int total,
+                                MediaQuery.VideoItem item, FileCopier.Result result) {
+        String relPath = TextUtils.isEmpty(item.relPath)
+                ? getString(R.string.value_unknown)
+                : item.relPath;
+        String stage = describeCopyErrorStage(result.errorStage);
+        String error = TextUtils.isEmpty(result.error)
+                ? getString(R.string.filecopier_err_unknown)
+                : sanitizeReportText(result.error);
+        String line = getString(R.string.error_report_item,
+                index + 1,
+                total,
+                sanitizeReportText(item.displayName),
+                formatBytes(item.size),
+                sanitizeReportText(relPath),
+                stage,
+                error);
+        report.add(line);
+    }
+
+    private ArrayList<String> buildErrorReportLines(ErrorReport report) {
+        ArrayList<String> out = new ArrayList<>(report.head);
+        int omitted = report.total - report.head.size() - report.tail.size();
+        if (omitted > 0) {
+            out.add(getString(R.string.error_report_omitted, omitted));
+        }
+        out.addAll(report.tail);
+        return out;
+    }
+
+    private String describeCopyErrorStage(@Nullable String stage) {
+        if (FileCopier.ERROR_STAGE_DEST_ACCESS.equals(stage)) {
+            return getString(R.string.error_stage_dest_access);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_CREATE_TEMP.equals(stage)) {
+            return getString(R.string.error_stage_dest_create_temp);
+        }
+        if (FileCopier.ERROR_STAGE_SOURCE_OPEN.equals(stage)) {
+            return getString(R.string.error_stage_source_open);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_OPEN_TEMP.equals(stage)) {
+            return getString(R.string.error_stage_dest_open_temp);
+        }
+        if (FileCopier.ERROR_STAGE_SOURCE_READ.equals(stage)) {
+            return getString(R.string.error_stage_source_read);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_WRITE.equals(stage)) {
+            return getString(R.string.error_stage_dest_write);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_FLUSH.equals(stage)) {
+            return getString(R.string.error_stage_dest_flush);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_SYNC.equals(stage)) {
+            return getString(R.string.error_stage_dest_sync);
+        }
+        if (FileCopier.ERROR_STAGE_VERIFY_SIZE.equals(stage)) {
+            return getString(R.string.error_stage_verify_size);
+        }
+        if (FileCopier.ERROR_STAGE_DEST_RENAME.equals(stage)) {
+            return getString(R.string.error_stage_dest_rename);
+        }
+        return getString(R.string.error_stage_unknown);
+    }
+
+    private String sanitizeReportText(@Nullable String text) {
+        if (TextUtils.isEmpty(text)) {
+            return getString(R.string.value_unknown);
+        }
+        return text.replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
     private void sendProgress(int stage, int done, int total, int copied, int fail, int duplicates,
                               @Nullable String currentName, long currentBytes,
                               long currentTotalBytes, long copiedBytes, long totalBytes,
                               long availableBytes, long speedBytesPerSecond,
                               @Nullable String errorMessage) {
-        if (stage != STAGE_DONE && stage != STAGE_ERROR) {
+        if (stage != STAGE_DONE && stage != STAGE_ERROR && stage != STAGE_CANCELED) {
             OperationStateStore.saveProgress(this, stage, done, total, copied, fail, duplicates,
                     currentName, currentBytes, currentTotalBytes, copiedBytes, totalBytes,
                     availableBytes, speedBytesPerSecond, errorMessage);
@@ -307,7 +503,9 @@ public class CopyService extends Service {
         notificationManager.notify(NOTIF_ID, buildNotification(
                 getString(R.string.notif_title),
                 text,
-                done, total, stage == STAGE_SEARCHING || stage == STAGE_CHECKING_SPACE, true));
+                done, total, stage == STAGE_SEARCHING
+                        || stage == STAGE_CHECKING_SPACE
+                        || stage == STAGE_STOPPING, true));
 
         Intent progress = new Intent(ACTION_PROGRESS);
         progress.setPackage(getPackageName());
@@ -343,6 +541,12 @@ public class CopyService extends Service {
         }
         if (stage == STAGE_ERROR) {
             return getString(R.string.stage_problem);
+        }
+        if (stage == STAGE_STOPPING) {
+            return getString(R.string.stage_stopping);
+        }
+        if (stage == STAGE_CANCELED) {
+            return getString(R.string.stage_canceled);
         }
         return TextUtils.isEmpty(currentName)
                 ? getString(R.string.notif_copy_in_progress, done, total)
@@ -414,6 +618,34 @@ public class CopyService extends Service {
             copyWakeLock.release();
         }
         copyWakeLock = null;
+    }
+
+    private boolean isCancelRequested() {
+        return cancelRequested || Thread.currentThread().isInterrupted();
+    }
+
+    private static class ErrorReport {
+        private static final int HEAD_LIMIT = 40;
+        private static final int TAIL_LIMIT = 40;
+
+        final ArrayList<String> head = new ArrayList<>();
+        final ArrayDeque<String> tail = new ArrayDeque<>();
+        int total;
+
+        void add(String line) {
+            if (TextUtils.isEmpty(line)) {
+                return;
+            }
+            total++;
+            if (head.size() < HEAD_LIMIT) {
+                head.add(line);
+                return;
+            }
+            tail.addLast(line);
+            while (tail.size() > TAIL_LIMIT) {
+                tail.removeFirst();
+            }
+        }
     }
 
     @Override

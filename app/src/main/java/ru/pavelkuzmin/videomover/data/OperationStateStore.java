@@ -27,6 +27,7 @@ public final class OperationStateStore {
     private static final String KEY_SPEED_BYTES_PER_SECOND = "speed_bytes_per_second";
     private static final String KEY_ERROR_MESSAGE = "error_message";
     private static final String KEY_TO_DELETE = "to_delete";
+    private static final String KEY_ERROR_REPORT = "error_report";
 
     private OperationStateStore() {}
 
@@ -59,6 +60,7 @@ public final class OperationStateStore {
                 .putLong(KEY_SPEED_BYTES_PER_SECOND, speedBytesPerSecond)
                 .putString(KEY_ERROR_MESSAGE, errorMessage)
                 .putString(KEY_TO_DELETE, "")
+                .putString(KEY_ERROR_REPORT, "")
                 .apply();
     }
 
@@ -66,6 +68,15 @@ public final class OperationStateStore {
                                     int fail, int duplicates, long copiedBytes,
                                     long totalBytes, long availableBytes,
                                     String errorMessage, List<String> toDelete) {
+        saveFinished(context, stage, total, copied, fail, duplicates, copiedBytes,
+                totalBytes, availableBytes, errorMessage, toDelete, new ArrayList<>());
+    }
+
+    public static void saveFinished(Context context, int stage, int total, int copied,
+                                    int fail, int duplicates, long copiedBytes,
+                                    long totalBytes, long availableBytes,
+                                    String errorMessage, List<String> toDelete,
+                                    List<String> errorReport) {
         prefs(context).edit()
                 .putBoolean(KEY_HAS_STATE, true)
                 .putBoolean(KEY_RESULT_HANDLED, false)
@@ -85,6 +96,7 @@ public final class OperationStateStore {
                 .putLong(KEY_SPEED_BYTES_PER_SECOND, 0L)
                 .putString(KEY_ERROR_MESSAGE, errorMessage)
                 .putString(KEY_TO_DELETE, joinLines(toDelete))
+                .putString(KEY_ERROR_REPORT, joinLines(errorReport))
                 .apply();
     }
 
@@ -122,7 +134,8 @@ public final class OperationStateStore {
                 prefs.getLong(KEY_AVAILABLE_BYTES, -1L),
                 prefs.getLong(KEY_SPEED_BYTES_PER_SECOND, 0L),
                 prefs.getString(KEY_ERROR_MESSAGE, null),
-                splitLines(prefs.getString(KEY_TO_DELETE, "")));
+                splitLines(prefs.getString(KEY_TO_DELETE, "")),
+                splitLines(prefs.getString(KEY_ERROR_REPORT, "")));
     }
 
     private static SharedPreferences prefs(Context context) {
@@ -178,13 +191,14 @@ public final class OperationStateStore {
         public final long speedBytesPerSecond;
         public final String errorMessage;
         public final ArrayList<String> toDelete;
+        public final ArrayList<String> errorReport;
 
         private Snapshot(boolean resultHandled, boolean deleteRequested, int stage,
                          int done, int total, int copied, int fail, int duplicates,
                          String currentName, long currentBytes, long currentTotalBytes,
                          long copiedBytes, long totalBytes, long availableBytes,
                          long speedBytesPerSecond, String errorMessage,
-                         ArrayList<String> toDelete) {
+                         ArrayList<String> toDelete, ArrayList<String> errorReport) {
             this.resultHandled = resultHandled;
             this.deleteRequested = deleteRequested;
             this.stage = stage;
@@ -202,6 +216,7 @@ public final class OperationStateStore {
             this.speedBytesPerSecond = speedBytesPerSecond;
             this.errorMessage = errorMessage;
             this.toDelete = toDelete;
+            this.errorReport = errorReport;
         }
     }
 }

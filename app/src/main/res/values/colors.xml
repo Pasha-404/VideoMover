@@ -13,4 +13,5 @@
     <color name="vm_success">#72E39B</color>
     <color name="vm_success_bg">#183523</color>
     <color name="vm_warning">#FFD166</color>
+    <color name="vm_danger">#F15B5B</color>
 </resources>

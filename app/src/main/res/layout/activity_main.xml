@@ -212,6 +212,21 @@
                         tools:text="Copying 3 of 10\nVID_20260510.mp4\n120 MB / 840 MB · 18 MB/s" />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnErrorDetails"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/error_report_button"
+                        android:textAllCaps="false"
+                        android:textColor="@color/vm_warning"
+                        android:textSize="13sp"
+                        android:visibility="gone"
+                        app:cornerRadius="18dp"
+                        app:strokeColor="@color/vm_warning"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnEjectHint"
                         style="?attr/materialButtonOutlinedStyle"
                         android:layout_width="match_parent"

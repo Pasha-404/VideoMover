@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -46,7 +47,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean transferPendingAfterVideoPermission;
     private boolean transferPendingAfterNotificationPermission;
     private boolean copyRunning;
+    private boolean stopRequested;
     private String pendingDeleteResultText;
+    private final ArrayList<String> lastErrorReport = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Runnable destinationRecheckRunnable = this::runDestinationRecheck;
     private long destinationRecheckUntilMs;
@@ -86,9 +89,11 @@ public class MainActivity extends AppCompatActivity {
             registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK) {
                     markProcessFinished(getString(R.string.process_delete_done, pendingDeleteResultText), false);
+                    updateErrorDetailsVisibility();
                     Toast.makeText(this, getString(R.string.deleting_done), Toast.LENGTH_LONG).show();
                 } else {
                     markProcessFinished(getString(R.string.process_delete_canceled, pendingDeleteResultText), true);
+                    updateErrorDetailsVisibility();
                     Toast.makeText(this, getString(R.string.deleting_canceled), Toast.LENGTH_LONG).show();
                 }
                 pendingDeleteResultText = null;
@@ -98,10 +103,13 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             copyRunning = true;
+            int stage = intent.getIntExtra(CopyService.EXTRA_STAGE, CopyService.STAGE_COPYING);
+            stopRequested = stopRequested || stage == CopyService.STAGE_STOPPING;
             stopDestinationRecheck();
-            binding.btnTransfer.setEnabled(false);
+            setTransferButtonRunning(stopRequested);
             binding.btnSettings.setEnabled(false);
             binding.btnEjectHint.setVisibility(View.GONE);
+            binding.btnErrorDetails.setVisibility(View.GONE);
             updateProcessFromProgress(intent);
         }
     };
@@ -119,10 +127,17 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        binding.btnTransfer.setOnClickListener(v -> onTransferAll());
+        binding.btnTransfer.setOnClickListener(v -> {
+            if (copyRunning) {
+                requestStopTransfer();
+            } else {
+                onTransferAll();
+            }
+        });
         binding.btnSettings.setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         binding.btnEjectHint.setOnClickListener(v -> showEjectInstruction());
+        binding.btnErrorDetails.setOnClickListener(v -> showErrorReportDialog());
 
         refreshMainInfoAndStartDestinationRecheck(true);
         if (ensureVideoPermission(false)) {
@@ -169,23 +184,32 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
-        if (snapshot.stage == CopyService.STAGE_DONE || snapshot.stage == CopyService.STAGE_ERROR) {
-            handleCopyFinished(snapshot.copied, snapshot.total, snapshot.fail,
+        if (isTerminalStage(snapshot.stage)) {
+            handleCopyFinished(snapshot.stage, snapshot.copied, snapshot.total, snapshot.fail,
                     snapshot.duplicates, snapshot.copiedBytes, snapshot.errorMessage,
-                    snapshot.toDelete, false, snapshot.deleteRequested);
+                    snapshot.toDelete, snapshot.errorReport, false, snapshot.deleteRequested);
             return true;
         }
 
         copyRunning = true;
+        stopRequested = snapshot.stage == CopyService.STAGE_STOPPING;
         stopDestinationRecheck();
-        binding.btnTransfer.setEnabled(false);
+        setTransferButtonRunning(stopRequested);
         binding.btnSettings.setEnabled(false);
         binding.btnEjectHint.setVisibility(View.GONE);
+        binding.btnErrorDetails.setVisibility(View.GONE);
         updateProcessFromSnapshot(snapshot);
         return true;
     }
 
+    private boolean isTerminalStage(int stage) {
+        return stage == CopyService.STAGE_DONE
+                || stage == CopyService.STAGE_ERROR
+                || stage == CopyService.STAGE_CANCELED;
+    }
+
     private void handleDoneIntent(Intent intent, boolean showToast) {
+        int stage = intent.getIntExtra(CopyService.EXTRA_STAGE, CopyService.STAGE_DONE);
         int copied = intent.getIntExtra(CopyService.EXTRA_OK, 0);
         int total = intent.getIntExtra(CopyService.EXTRA_TOTAL, 0);
         int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
@@ -193,18 +217,35 @@ public class MainActivity extends AppCompatActivity {
         long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
         String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
         ArrayList<String> toDeleteStr = intent.getStringArrayListExtra(CopyService.EXTRA_TO_DELETE);
+        ArrayList<String> errorReport = intent.getStringArrayListExtra(CopyService.EXTRA_ERROR_REPORT);
 
-        handleCopyFinished(copied, total, fail, duplicates, copiedBytes, error,
-                toDeleteStr == null ? new ArrayList<>() : toDeleteStr, showToast, false);
+        handleCopyFinished(stage, copied, total, fail, duplicates, copiedBytes, error,
+                toDeleteStr == null ? new ArrayList<>() : toDeleteStr,
+                errorReport == null ? new ArrayList<>() : errorReport,
+                showToast, false);
     }
 
-    private void handleCopyFinished(int copied, int total, int fail, int duplicates,
+    private void handleCopyFinished(int stage, int copied, int total, int fail, int duplicates,
                                     long copiedBytes, @Nullable String error,
-                                    ArrayList<String> toDeleteStr, boolean showToast,
+                                    ArrayList<String> toDeleteStr, ArrayList<String> errorReport,
+                                    boolean showToast,
                                     boolean deleteAlreadyRequested) {
+        stopRequested = false;
         ArrayList<Uri> toDelete = parseDeleteUris(toDeleteStr);
+        setErrorReport(errorReport);
+        if (stage == CopyService.STAGE_CANCELED) {
+            setErrorReport(new ArrayList<>());
+            String resultText = getString(R.string.process_canceled_detail,
+                    copied, total, formatBytes(copiedBytes));
+            markProcessFinished(getString(R.string.stage_canceled), resultText, false);
+            if (showToast) {
+                Toast.makeText(MainActivity.this, resultText, Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if (!TextUtils.isEmpty(error)) {
             markProcessFinished(getString(R.string.process_failed_detail, error), true);
+            updateErrorDetailsVisibility();
             if (showToast) {
                 Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
             }
@@ -215,7 +256,8 @@ public class MainActivity extends AppCompatActivity {
         if (SettingsStore.isDeleteAfter(MainActivity.this) && !toDelete.isEmpty()) {
             pendingDeleteResultText = resultText;
             copyRunning = true;
-            binding.btnTransfer.setEnabled(false);
+            stopRequested = false;
+            setTransferButtonIdle(false);
             binding.btnSettings.setEnabled(false);
             binding.btnEjectHint.setVisibility(View.GONE);
             setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
@@ -227,6 +269,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         markProcessFinished(resultText, fail > 0);
+        updateErrorDetailsVisibility();
         if (showToast) {
             Toast.makeText(MainActivity.this, resultText, Toast.LENGTH_LONG).show();
         }
@@ -243,6 +286,29 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return out;
+    }
+
+    private void setErrorReport(ArrayList<String> report) {
+        lastErrorReport.clear();
+        if (report != null) {
+            lastErrorReport.addAll(report);
+        }
+        updateErrorDetailsVisibility();
+    }
+
+    private void updateErrorDetailsVisibility() {
+        binding.btnErrorDetails.setVisibility(lastErrorReport.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private void showErrorReportDialog() {
+        String message = lastErrorReport.isEmpty()
+                ? getString(R.string.error_report_empty)
+                : TextUtils.join("\n\n", lastErrorReport);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.error_report_title)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     private boolean ensureVideoPermission(boolean continueTransferAfterGrant) {
@@ -289,7 +355,6 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean refreshMainInfo(boolean resetProcess) {
         boolean deleteAfter = SettingsStore.isDeleteAfter(this);
-        binding.btnTransfer.setText(deleteAfter ? R.string.transfer : R.string.copy_videos);
         binding.tvActionMode.setText(deleteAfter ? R.string.main_action_move : R.string.main_action_copy);
         binding.tvSearchMode.setText(buildSearchModeText());
         int videoAccessState = VideoPermissionUtil.getAccessState(this);
@@ -314,7 +379,11 @@ public class MainActivity extends AppCompatActivity {
                     : getString(R.string.main_free_space_unknown));
         }
 
-        binding.btnTransfer.setEnabled(!copyRunning && writable && isSourceModeReady());
+        if (copyRunning) {
+            setTransferButtonRunning(stopRequested);
+        } else {
+            setTransferButtonIdle(writable && isSourceModeReady());
+        }
         binding.tvStorageStatus.setBackgroundResource(writable
                 ? R.drawable.bg_status_ready
                 : R.drawable.bg_status_missing);
@@ -327,6 +396,8 @@ public class MainActivity extends AppCompatActivity {
 
         if (resetProcess) {
             binding.btnEjectHint.setVisibility(View.GONE);
+            binding.btnErrorDetails.setVisibility(View.GONE);
+            lastErrorReport.clear();
             if (!writable) {
                 setIdleProcess(getString(R.string.process_setup_needed_title),
                         getString(R.string.process_setup_needed_detail));
@@ -341,6 +412,31 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return writable;
+    }
+
+    private void setTransferButtonIdle(boolean enabled) {
+        boolean deleteAfter = SettingsStore.isDeleteAfter(this);
+        binding.btnTransfer.setEnabled(enabled);
+        binding.btnTransfer.setText(deleteAfter ? R.string.transfer : R.string.copy_videos);
+        binding.btnTransfer.setIconResource(R.drawable.ic_transfer_24);
+        tintTransferButton(R.color.vm_primary_deep, R.color.vm_on_primary);
+    }
+
+    private void setTransferButtonRunning(boolean stopping) {
+        binding.btnTransfer.setEnabled(!stopping);
+        binding.btnTransfer.setText(stopping ? R.string.stop_transfer_pending : R.string.stop_transfer);
+        binding.btnTransfer.setIconResource(R.drawable.ic_stop_24);
+        tintTransferButton(stopping ? R.color.vm_outline : R.color.vm_danger, R.color.vm_on_primary);
+    }
+
+    private void tintTransferButton(int backgroundColorRes, int foregroundColorRes) {
+        ColorStateList background = ColorStateList.valueOf(
+                ContextCompat.getColor(this, backgroundColorRes));
+        ColorStateList foreground = ColorStateList.valueOf(
+                ContextCompat.getColor(this, foregroundColorRes));
+        binding.btnTransfer.setBackgroundTintList(background);
+        binding.btnTransfer.setTextColor(foreground);
+        binding.btnTransfer.setIconTint(foreground);
     }
 
     private String getVideoAccessStatusText(int accessState) {
@@ -436,7 +532,10 @@ public class MainActivity extends AppCompatActivity {
 
         OperationStateStore.clear(this);
         copyRunning = true;
-        binding.btnTransfer.setEnabled(false);
+        stopRequested = false;
+        lastErrorReport.clear();
+        binding.btnErrorDetails.setVisibility(View.GONE);
+        setTransferButtonRunning(false);
         binding.btnSettings.setEnabled(false);
         binding.btnEjectHint.setVisibility(View.GONE);
         setProcessStage(getString(R.string.stage_searching), getString(R.string.process_searching_detail),
@@ -459,9 +558,31 @@ public class MainActivity extends AppCompatActivity {
             ContextCompat.startForegroundService(this, service);
         } catch (Exception e) {
             copyRunning = false;
+            stopRequested = false;
             binding.btnSettings.setEnabled(true);
             markProcessFinished(getString(R.string.process_failed_detail,
                     e.getClass().getSimpleName() + ": " + e.getMessage()), true);
+        }
+    }
+
+    private void requestStopTransfer() {
+        if (stopRequested) {
+            return;
+        }
+        stopRequested = true;
+        setTransferButtonRunning(true);
+        setProcessStage(getString(R.string.stage_stopping), getString(R.string.process_stopping_detail),
+                binding.processProgress.getProgress(), false, false);
+
+        Intent service = new Intent(this, CopyService.class);
+        service.setAction(CopyService.ACTION_CANCEL);
+        try {
+            startService(service);
+        } catch (Exception e) {
+            stopRequested = false;
+            setTransferButtonRunning(false);
+            Toast.makeText(this, getString(R.string.toast_stop_failed,
+                    e.getClass().getSimpleName() + ": " + e.getMessage()), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -482,7 +603,9 @@ public class MainActivity extends AppCompatActivity {
         String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
 
         int progress = calculateProgress(stage, done, total, copiedBytes, totalBytes);
-        boolean indeterminate = stage == CopyService.STAGE_SEARCHING || stage == CopyService.STAGE_CHECKING_SPACE;
+        boolean indeterminate = stage == CopyService.STAGE_SEARCHING
+                || stage == CopyService.STAGE_CHECKING_SPACE
+                || stage == CopyService.STAGE_STOPPING;
         setProcessStage(getStageTitle(stage, done, total), buildStageDetail(stage, copied, fail, duplicates,
                         currentName, currentBytes, currentTotalBytes, copiedBytes, totalBytes,
                         availableBytes, speed, error),
@@ -493,7 +616,8 @@ public class MainActivity extends AppCompatActivity {
         int progress = calculateProgress(snapshot.stage, snapshot.done, snapshot.total,
                 snapshot.copiedBytes, snapshot.totalBytes);
         boolean indeterminate = snapshot.stage == CopyService.STAGE_SEARCHING
-                || snapshot.stage == CopyService.STAGE_CHECKING_SPACE;
+                || snapshot.stage == CopyService.STAGE_CHECKING_SPACE
+                || snapshot.stage == CopyService.STAGE_STOPPING;
         setProcessStage(getStageTitle(snapshot.stage, snapshot.done, snapshot.total),
                 buildStageDetail(snapshot.stage, snapshot.copied, snapshot.fail, snapshot.duplicates,
                         snapshot.currentName, snapshot.currentBytes, snapshot.currentTotalBytes,
@@ -503,7 +627,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private int calculateProgress(int stage, int done, int total, long copiedBytes, long totalBytes) {
-        if (stage == CopyService.STAGE_DONE) return PROGRESS_MAX;
+        if (stage == CopyService.STAGE_DONE || stage == CopyService.STAGE_CANCELED) return PROGRESS_MAX;
         if (stage == CopyService.STAGE_ERROR) return 0;
         if (totalBytes > 0) {
             return (int) Math.max(0, Math.min(PROGRESS_MAX, copiedBytes * PROGRESS_MAX / totalBytes));
@@ -526,6 +650,10 @@ public class MainActivity extends AppCompatActivity {
                 return getString(R.string.stage_done);
             case CopyService.STAGE_ERROR:
                 return getString(R.string.stage_problem);
+            case CopyService.STAGE_STOPPING:
+                return getString(R.string.stage_stopping);
+            case CopyService.STAGE_CANCELED:
+                return getString(R.string.stage_canceled);
             case CopyService.STAGE_COPYING:
             default:
                 return getString(R.string.stage_copying, Math.min(done + 1, Math.max(total, 1)), total);
@@ -549,6 +677,12 @@ public class MainActivity extends AppCompatActivity {
         }
         if (stage == CopyService.STAGE_DONE) {
             return getString(R.string.stage_done);
+        }
+        if (stage == CopyService.STAGE_STOPPING) {
+            return getString(R.string.process_stopping_detail);
+        }
+        if (stage == CopyService.STAGE_CANCELED) {
+            return getString(R.string.stage_canceled);
         }
 
         String status = getString(R.string.process_counters, copied, duplicates, fail);
@@ -592,10 +726,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void markProcessFinished(String detail, boolean problem) {
+        markProcessFinished(getString(problem ? R.string.stage_problem : R.string.stage_done),
+                detail, problem);
+    }
+
+    private void markProcessFinished(String title, String detail, boolean problem) {
         OperationStateStore.markResultHandled(this);
         copyRunning = false;
-        setProcessStage(getString(problem ? R.string.stage_problem : R.string.stage_done),
-                detail, problem ? 0 : PROGRESS_MAX, false, problem);
+        stopRequested = false;
+        setProcessStage(title, detail, problem ? 0 : PROGRESS_MAX, false, problem);
         binding.btnEjectHint.setVisibility(View.VISIBLE);
         binding.btnSettings.setEnabled(true);
         refreshMainInfo(false);
