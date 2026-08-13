@@ -1,2 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<full-backup-content />
+<full-backup-content>
+    <!-- A restored journal cannot prove anything about a USB drive from another device. -->
+    <exclude domain="database" path="transfer_journal.db" />
+</full-backup-content>

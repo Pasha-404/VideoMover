@@ -116,8 +116,10 @@
     <string name="process_stopping_detail">Завершаю текущую запись и очищаю временный файл.</string>
     <string name="process_canceled_detail">Остановлено. Скопировано: %1$d из %2$d · данные: %3$s. Оригиналы не удалялись.</string>
     <string name="process_delete_request_detail">Android попросит подтвердить удаление оригиналов с телефона.</string>
+    <string name="process_delete_verifying_detail">Проверяю, что оригиналы на телефоне не изменились.</string>
     <string name="process_delete_done">%1$s\nОригиналы удалены.</string>
     <string name="process_delete_canceled">%1$s\nУдаление оригиналов отменено.</string>
+    <string name="process_delete_nothing_safe">%1$s\nОригиналы изменились или стали недоступны, поэтому они сохранены.</string>
     <string name="error_not_enough_space">Недостаточно свободного места. Нужно: %1$s, свободно: %2$s.</string>
     <string name="error_not_enough_space_remaining">Во время копирования закончилось место. Осталось скопировать: %1$s, свободно: %2$s.</string>
     <string name="error_destination_failure_streak">Накопитель дал %1$d ошибок записи подряд. Копирование остановлено, чтобы не получить сотни одинаковых ошибок.</string>
@@ -137,6 +139,7 @@
     <string name="filecopier_err_stream_access">Нет доступа к потоку</string>
     <string name="filecopier_err_create_temp">Не удалось создать временный файл</string>
     <string name="filecopier_err_size_mismatch">Размер не совпал</string>
+    <string name="filecopier_err_hash_mismatch">Копия не прошла проверку целостности</string>
     <string name="filecopier_err_rename_failed">Не удалось переименовать файл</string>
     <string name="filecopier_err_unknown">Неизвестная ошибка копирования</string>
     <string name="error_report_button">Показать ошибки</string>
@@ -153,6 +156,15 @@
     <string name="error_stage_dest_flush">сброс буфера записи</string>
     <string name="error_stage_dest_sync">синхронизация файла с накопителем</string>
     <string name="error_stage_verify_size">проверка размера копии</string>
+    <string name="error_stage_verify_hash">проверка содержимого копии</string>
     <string name="error_stage_dest_rename">переименование временного файла</string>
     <string name="error_stage_unknown">неизвестный этап</string>
+    <string name="stop_transfer_title">Остановить перенос?</string>
+    <string name="stop_transfer_message">Текущее видео не будет перенесено. Уже проверенные видео останутся на накопителе, а оригиналы не удалятся.</string>
+    <string name="stop_transfer_keep">Продолжить перенос</string>
+    <string name="stop_transfer_confirm">Остановить</string>
+    <string name="error_report_copy">Скопировать отчёт</string>
+    <string name="error_report_copied">Отчёт скопирован</string>
+    <string name="process_recovery_title">Предыдущая операция была прервана</string>
+    <string name="process_recovery_detail">Исходные видео сохранены. Нажмите основную кнопку: приложение проверит накопитель и начнёт незавершённое видео заново.</string>
 </resources>

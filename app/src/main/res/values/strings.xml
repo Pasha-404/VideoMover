@@ -116,8 +116,10 @@
     <string name="process_stopping_detail">Finishing the current write and cleaning up the temporary file.</string>
     <string name="process_canceled_detail">Stopped. Copied: %1$d of %2$d · data: %3$s. Originals were not deleted.</string>
     <string name="process_delete_request_detail">Android will ask you to confirm deleting originals from the phone.</string>
+    <string name="process_delete_verifying_detail">Checking that the phone originals have not changed.</string>
     <string name="process_delete_done">%1$s\nOriginals were deleted.</string>
     <string name="process_delete_canceled">%1$s\nOriginal deletion was canceled.</string>
+    <string name="process_delete_nothing_safe">%1$s\nThe originals changed or became unavailable, so they were kept.</string>
     <string name="error_not_enough_space">Not enough free space. Required: %1$s, free: %2$s.</string>
     <string name="error_not_enough_space_remaining">Not enough free space during copying. Remaining: %1$s, free: %2$s.</string>
     <string name="error_destination_failure_streak">The drive failed %1$d writes in a row. Copying was stopped to avoid hundreds of repeated errors.</string>
@@ -137,6 +139,7 @@
     <string name="filecopier_err_stream_access">Cannot access stream</string>
     <string name="filecopier_err_create_temp">Failed to create a temporary file</string>
     <string name="filecopier_err_size_mismatch">Size mismatch</string>
+    <string name="filecopier_err_hash_mismatch">The copied file did not pass the integrity check</string>
     <string name="filecopier_err_rename_failed">Failed to rename file</string>
     <string name="filecopier_err_unknown">Unknown copy error</string>
     <string name="error_report_button">Show errors</string>
@@ -153,6 +156,15 @@
     <string name="error_stage_dest_flush">flushing write buffer</string>
     <string name="error_stage_dest_sync">syncing file to drive</string>
     <string name="error_stage_verify_size">checking copied size</string>
+    <string name="error_stage_verify_hash">checking copied contents</string>
     <string name="error_stage_dest_rename">renaming temporary file</string>
     <string name="error_stage_unknown">unknown stage</string>
+    <string name="stop_transfer_title">Stop transfer?</string>
+    <string name="stop_transfer_message">The current video will not be moved. Already verified videos will stay on the drive; originals will not be deleted.</string>
+    <string name="stop_transfer_keep">Continue transfer</string>
+    <string name="stop_transfer_confirm">Stop</string>
+    <string name="error_report_copy">Copy report</string>
+    <string name="error_report_copied">Report copied</string>
+    <string name="process_recovery_title">Previous transfer was interrupted</string>
+    <string name="process_recovery_detail">The source videos were kept safe. Tap the main button to check the drive and continue from the beginning of the unfinished video.</string>
 </resources>

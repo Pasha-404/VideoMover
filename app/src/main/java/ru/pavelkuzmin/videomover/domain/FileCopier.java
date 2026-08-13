@@ -15,9 +15,14 @@ import java.io.OutputStream;
 import java.security.MessageDigest;
 
 import ru.pavelkuzmin.videomover.R;
+import ru.pavelkuzmin.videomover.data.TransferJournal;
 import ru.pavelkuzmin.videomover.util.HashUtil;
 
-public class FileCopier {
+/**
+ * Copies one source through an app-owned temporary document. A successful result always means that
+ * the final destination was read back and compared with the bytes read from the source.
+ */
+public final class FileCopier {
     private static final int BUFFER_SIZE = 1024 * 1024;
 
     public static final String ERROR_STAGE_DEST_ACCESS = "dest_access";
@@ -29,8 +34,19 @@ public class FileCopier {
     public static final String ERROR_STAGE_DEST_FLUSH = "dest_flush";
     public static final String ERROR_STAGE_DEST_SYNC = "dest_sync";
     public static final String ERROR_STAGE_VERIFY_SIZE = "verify_size";
+    public static final String ERROR_STAGE_VERIFY_HASH = "verify_hash";
     public static final String ERROR_STAGE_DEST_RENAME = "dest_rename";
     public static final String ERROR_STAGE_UNKNOWN = "unknown";
+
+    public static final String ERROR_CATEGORY_PERMISSION = "PERMISSION";
+    public static final String ERROR_CATEGORY_SOURCE = "SOURCE_MISSING_OR_CHANGED";
+    public static final String ERROR_CATEGORY_DESTINATION = "MEDIA_OR_PROVIDER";
+    public static final String ERROR_CATEGORY_INTEGRITY = "INTEGRITY_FAILURE";
+    public static final String ERROR_CATEGORY_AMBIGUOUS = "AMBIGUOUS_MUTATION";
+    public static final String ERROR_CATEGORY_UNKNOWN = "UNKNOWN";
+
+    private FileCopier() {
+    }
 
     public interface ProgressCallback {
         void onProgress(long writtenBytes, long totalBytes);
@@ -40,7 +56,18 @@ public class FileCopier {
         boolean isCanceled();
     }
 
-    public static class Result {
+    /** Journal writes happen before the next externally visible side effect. */
+    public interface LifecycleCallback {
+        void onTemporaryCreated(Uri tempUri);
+
+        void onVerificationStarted(String sourceHash, Uri tempUri);
+
+        void onPublishingStarted(String sourceHash, Uri tempUri, String finalName);
+
+        void onFinalVerified(boolean duplicate, String sourceHash, Uri finalUri, String finalName);
+    }
+
+    public static final class Result {
         public final boolean ok;
         public final boolean duplicate;
         public final boolean canceled;
@@ -49,20 +76,14 @@ public class FileCopier {
         public final String sha256;
         public final String error;
         public final String errorStage;
+        public final String errorCategory;
         public final boolean destinationIssue;
+        public final Uri tempUri;
+        public final Uri finalUri;
 
-        public Result(boolean ok, boolean duplicate, String finalName, long bytes, String sha256, String error) {
-            this(ok, duplicate, false, finalName, bytes, sha256, error);
-        }
-
-        public Result(boolean ok, boolean duplicate, boolean canceled, String finalName,
-                      long bytes, String sha256, String error) {
-            this(ok, duplicate, canceled, finalName, bytes, sha256, error, null, false);
-        }
-
-        public Result(boolean ok, boolean duplicate, boolean canceled, String finalName,
-                      long bytes, String sha256, String error, String errorStage,
-                      boolean destinationIssue) {
+        private Result(boolean ok, boolean duplicate, boolean canceled, String finalName, long bytes,
+                       String sha256, String error, String errorStage, String errorCategory,
+                       boolean destinationIssue, Uri tempUri, Uri finalUri) {
             this.ok = ok;
             this.duplicate = duplicate;
             this.canceled = canceled;
@@ -71,214 +92,248 @@ public class FileCopier {
             this.sha256 = sha256;
             this.error = error;
             this.errorStage = errorStage;
+            this.errorCategory = errorCategory;
             this.destinationIssue = destinationIssue;
+            this.tempUri = tempUri;
+            this.finalUri = finalUri;
         }
     }
 
-    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName,
-                                        long expectedSize, DocumentFile destDir) {
-        return copyWithSha256(ctx, srcUri, displayName, expectedSize, destDir, null);
-    }
-
-    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName,
-                                        long expectedSize, DocumentFile destDir,
-                                        ProgressCallback progressCallback) {
-        return copyWithSha256(ctx, srcUri, displayName, expectedSize, destDir, progressCallback, null);
-    }
-
-    public static Result copyWithSha256(Context ctx, Uri srcUri, String displayName,
-                                        long expectedSize, DocumentFile destDir,
+    public static Result copyWithSha256(Context context, Uri sourceUri, String displayName,
+                                        long expectedSize, DocumentFile destination,
                                         ProgressCallback progressCallback,
-                                        CancelChecker cancelChecker) {
-        ContentResolver cr = ctx.getContentResolver();
+                                        CancelChecker cancelChecker,
+                                        LifecycleCallback lifecycleCallback,
+                                        String temporaryName) {
+        ContentResolver resolver = context.getContentResolver();
         Uri tempUri = null;
-        long written = 0;
-        String hash = null;
-        String errorStage = ERROR_STAGE_UNKNOWN;
+        String finalName = null;
+        long written = 0L;
+        String sourceHash = null;
+        String stage = ERROR_STAGE_UNKNOWN;
         boolean destinationIssue = false;
 
         try {
-            errorStage = ERROR_STAGE_DEST_ACCESS;
+            stage = ERROR_STAGE_DEST_ACCESS;
             destinationIssue = true;
-            if (destDir == null || !destDir.canWrite()) {
-                return error(ctx, ERROR_STAGE_DEST_ACCESS, true, 0, null,
-                        ctx.getString(R.string.no_write_access));
+            if (destination == null || !destination.exists() || !destination.canWrite()) {
+                return error(context, stage, ERROR_CATEGORY_DESTINATION, true, written, null, null, null,
+                        context.getString(R.string.no_write_access));
             }
 
-            NameParts parts = splitName(displayName);
-            DocumentFile existing = destDir.findFile(displayName);
-            if (existing != null && existing.isFile() && expectedSize > 0 && existing.length() == expectedSize) {
-                return new Result(true, true, displayName, expectedSize, null, null);
+            stage = ERROR_STAGE_DEST_CREATE_TEMP;
+            DocumentFile temporary = destination.createFile("application/octet-stream", temporaryName);
+            if (temporary == null) {
+                return error(context, stage, ERROR_CATEGORY_DESTINATION, true, written, null, null, null,
+                        context.getString(R.string.filecopier_err_create_temp));
             }
+            tempUri = temporary.getUri();
+            lifecycleCallback.onTemporaryCreated(tempUri);
+            throwIfCanceled(cancelChecker);
 
-            String finalName = ensureUniqueName(destDir, parts.base, parts.ext);
-            errorStage = ERROR_STAGE_DEST_CREATE_TEMP;
-            DocumentFile tempFile = destDir.createFile("video/*", finalName + ".partial");
-            if (tempFile == null) {
-                return error(ctx, ERROR_STAGE_DEST_CREATE_TEMP, true, 0, null,
-                        ctx.getString(R.string.filecopier_err_create_temp));
-            }
-            tempUri = tempFile.getUri();
-            if (isCanceled(cancelChecker)) {
-                deleteQuietly(cr, tempUri);
-                return canceled(written, hash);
-            }
-
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            MessageDigest sourceDigest = MessageDigest.getInstance("SHA-256");
             byte[] buffer = new byte[BUFFER_SIZE];
 
-            errorStage = ERROR_STAGE_SOURCE_OPEN;
+            stage = ERROR_STAGE_SOURCE_OPEN;
             destinationIssue = false;
-            try (InputStream in = cr.openInputStream(srcUri)) {
-                if (in == null) {
-                    deleteQuietly(cr, tempUri);
-                    return error(ctx, ERROR_STAGE_SOURCE_OPEN, false, written, null,
-                            ctx.getString(R.string.filecopier_err_stream_access));
+            try (InputStream input = resolver.openInputStream(sourceUri)) {
+                if (input == null) {
+                    return error(context, stage, ERROR_CATEGORY_SOURCE, false, written, null, tempUri, null,
+                            context.getString(R.string.filecopier_err_stream_access));
                 }
 
-                errorStage = ERROR_STAGE_DEST_OPEN_TEMP;
+                stage = ERROR_STAGE_DEST_OPEN_TEMP;
                 destinationIssue = true;
-                try (ParcelFileDescriptor outDescriptor = cr.openFileDescriptor(tempUri, "w");
-                     OutputStream out = outDescriptor == null
-                             ? null
-                             : new FileOutputStream(outDescriptor.getFileDescriptor())) {
-                    if (out == null) {
-                        deleteQuietly(cr, tempUri);
-                        return error(ctx, ERROR_STAGE_DEST_OPEN_TEMP, true, written, null,
-                                ctx.getString(R.string.filecopier_err_stream_access));
+                try (ParcelFileDescriptor descriptor = resolver.openFileDescriptor(tempUri, "w");
+                     OutputStream output = descriptor == null ? null
+                             : new FileOutputStream(descriptor.getFileDescriptor())) {
+                    if (output == null) {
+                        return error(context, stage, ERROR_CATEGORY_DESTINATION, true, written, null, tempUri, null,
+                                context.getString(R.string.filecopier_err_stream_access));
                     }
-
-                    int read;
                     while (true) {
                         throwIfCanceled(cancelChecker);
-                        errorStage = ERROR_STAGE_SOURCE_READ;
+                        stage = ERROR_STAGE_SOURCE_READ;
                         destinationIssue = false;
-                        read = in.read(buffer);
+                        int read = input.read(buffer);
                         if (read == -1) {
                             break;
                         }
-
-                        digest.update(buffer, 0, read);
-                        errorStage = ERROR_STAGE_DEST_WRITE;
+                        if (read == 0) {
+                            throw new IllegalStateException("Source returned zero bytes without reaching EOF");
+                        }
+                        sourceDigest.update(buffer, 0, read);
+                        stage = ERROR_STAGE_DEST_WRITE;
                         destinationIssue = true;
-                        out.write(buffer, 0, read);
+                        output.write(buffer, 0, read);
                         written += read;
                         if (progressCallback != null) {
                             progressCallback.onProgress(written, expectedSize);
                         }
-                        throwIfCanceled(cancelChecker);
                     }
-                    errorStage = ERROR_STAGE_DEST_FLUSH;
-                    destinationIssue = true;
-                    out.flush();
-                    if (outDescriptor != null) {
-                        errorStage = ERROR_STAGE_DEST_SYNC;
-                        outDescriptor.getFileDescriptor().sync();
-                    }
+                    stage = ERROR_STAGE_DEST_FLUSH;
+                    output.flush();
+                    stage = ERROR_STAGE_DEST_SYNC;
+                    descriptor.getFileDescriptor().sync();
                 }
             }
 
-            if (isCanceled(cancelChecker)) {
-                deleteQuietly(cr, tempUri);
-                return canceled(written, hash);
-            }
-
-            errorStage = ERROR_STAGE_VERIFY_SIZE;
-            destinationIssue = false;
+            throwIfCanceled(cancelChecker);
+            stage = ERROR_STAGE_VERIFY_SIZE;
             if (expectedSize > 0 && written != expectedSize) {
-                deleteQuietly(cr, tempUri);
-                return error(ctx, ERROR_STAGE_VERIFY_SIZE, false, written, null,
-                        ctx.getString(R.string.filecopier_err_size_mismatch));
+                return error(context, stage, ERROR_CATEGORY_SOURCE, false, written, null, tempUri, null,
+                        context.getString(R.string.filecopier_err_size_mismatch));
             }
 
-            hash = HashUtil.toHex(digest.digest());
-            errorStage = ERROR_STAGE_DEST_RENAME;
+            sourceHash = HashUtil.toHex(sourceDigest.digest());
+            lifecycleCallback.onVerificationStarted(sourceHash, tempUri);
+            stage = ERROR_STAGE_VERIFY_HASH;
             destinationIssue = true;
-            Uri renamed = DocumentsContract.renameDocument(cr, tempUri, finalName);
-            if (renamed == null) {
-                deleteQuietly(cr, tempUri);
-                return error(ctx, ERROR_STAGE_DEST_RENAME, true, written, hash,
-                        ctx.getString(R.string.filecopier_err_rename_failed));
+            String temporaryHash = sha256Of(context, tempUri);
+            if (!sourceHash.equals(temporaryHash)) {
+                return error(context, stage, ERROR_CATEGORY_INTEGRITY, true, written, sourceHash, tempUri, null,
+                        context.getString(R.string.filecopier_err_hash_mismatch));
             }
 
-            return new Result(true, false, finalName, written, hash, null);
-        } catch (CopyCanceledException e) {
-            deleteQuietly(cr, tempUri);
-            return canceled(written, hash);
+            // A name and a size do not prove that a previous transfer has the same video.
+            DocumentFile existing = destination.findFile(displayName);
+            if (existing != null && existing.isFile()) {
+                String existingHash = sha256Of(context, existing.getUri());
+                if (sourceHash.equals(existingHash)) {
+                    deleteTemporaryQuietly(resolver, tempUri);
+                    lifecycleCallback.onFinalVerified(true, sourceHash, existing.getUri(), existing.getName());
+                    return new Result(true, true, false, existing.getName(), written, sourceHash,
+                            null, null, null, false, null, existing.getUri());
+                }
+            }
+
+            finalName = ensureUniqueName(destination, displayName);
+            lifecycleCallback.onPublishingStarted(sourceHash, tempUri, finalName);
+            stage = ERROR_STAGE_DEST_RENAME;
+            Uri renamed = DocumentsContract.renameDocument(resolver, tempUri, finalName);
+            if (renamed == null) {
+                return error(context, stage, ERROR_CATEGORY_AMBIGUOUS, true, written, sourceHash, tempUri, null,
+                        context.getString(R.string.filecopier_err_rename_failed));
+            }
+
+            stage = ERROR_STAGE_VERIFY_HASH;
+            String finalHash = sha256Of(context, renamed);
+            if (!sourceHash.equals(finalHash)) {
+                return error(context, stage, ERROR_CATEGORY_INTEGRITY, true, written, sourceHash, null, renamed,
+                        context.getString(R.string.filecopier_err_hash_mismatch));
+            }
+            lifecycleCallback.onFinalVerified(false, sourceHash, renamed, finalName);
+            return new Result(true, false, false, finalName, written, sourceHash,
+                    null, null, null, false, null, renamed);
+        } catch (CopyCanceledException ignored) {
+            return new Result(false, false, true, finalName, written, sourceHash, null,
+                    null, null, false, tempUri, null);
         } catch (SecurityException e) {
-            deleteQuietly(cr, tempUri);
-            return error(ctx, errorStage, destinationIssue, written, hash,
-                    "SecurityException: " + e.getMessage());
+            return error(context, stage, ERROR_CATEGORY_PERMISSION, destinationIssue, written, sourceHash,
+                    tempUri, null, errorText(e));
         } catch (Exception e) {
-            deleteQuietly(cr, tempUri);
-            return error(ctx, errorStage, destinationIssue, written, hash,
-                    e.getClass().getSimpleName() + ": " + e.getMessage());
+            String category = ERROR_STAGE_DEST_RENAME.equals(stage)
+                    ? ERROR_CATEGORY_AMBIGUOUS
+                    : (ERROR_STAGE_VERIFY_HASH.equals(stage) ? ERROR_CATEGORY_INTEGRITY
+                    : (destinationIssue ? ERROR_CATEGORY_DESTINATION : ERROR_CATEGORY_SOURCE));
+            return error(context, stage, category, destinationIssue, written, sourceHash, tempUri, null,
+                    errorText(e));
         }
     }
 
-    private static Result canceled(long written, String hash) {
-        return new Result(false, false, true, null, written, hash, null);
+    public static String temporaryName(long operationId, int itemIndex) {
+        return TransferJournal.TEMP_PREFIX + operationId + "-" + itemIndex + "-"
+                + System.nanoTime() + ".partial";
     }
 
-    private static Result error(Context ctx, String errorStage, boolean destinationIssue,
-                                long written, String hash, String message) {
+    public static String sha256Of(Context context, Uri uri) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[BUFFER_SIZE];
+        try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+            if (input == null) {
+                throw new IllegalStateException("Cannot open stream for hash");
+            }
+            while (true) {
+                int read = input.read(buffer);
+                if (read == -1) break;
+                if (read == 0) throw new IllegalStateException("Stream returned zero bytes without EOF");
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HashUtil.toHex(digest.digest());
+    }
+
+    public static void deleteOwnedTemporary(Context context, Uri uri) {
+        if (uri == null) return;
+        try {
+            DocumentFile temporary = DocumentFile.fromSingleUri(context, uri);
+            String name = temporary == null ? null : temporary.getName();
+            if (name != null && name.startsWith(TransferJournal.TEMP_PREFIX)) {
+                DocumentsContract.deleteDocument(context.getContentResolver(), uri);
+            }
+        } catch (Exception ignored) {
+            // The journal will retry cleanup after the next successful connection to the same tree.
+        }
+    }
+
+    private static Result error(Context context, String stage, String category, boolean destinationIssue,
+                                long written, String hash, Uri tempUri, Uri finalUri, String message) {
         return new Result(false, false, false, null, written, hash,
-                TextUtils.isEmpty(message) ? ctx.getString(R.string.filecopier_err_unknown) : message,
-                errorStage, destinationIssue);
+                TextUtils.isEmpty(message) ? context.getString(R.string.filecopier_err_unknown) : message,
+                stage, category, destinationIssue, tempUri, finalUri);
     }
 
-    private static boolean isCanceled(CancelChecker cancelChecker) {
-        return cancelChecker != null && cancelChecker.isCanceled();
-    }
-
-    private static void throwIfCanceled(CancelChecker cancelChecker) throws CopyCanceledException {
-        if (isCanceled(cancelChecker)) {
-            throw new CopyCanceledException();
-        }
-    }
-
-    private static NameParts splitName(String displayName) {
-        String base = TextUtils.isEmpty(displayName) ? "video" : displayName.trim();
-        String ext = "";
-        int dot = base.lastIndexOf('.');
-        if (dot > 0 && dot < base.length() - 1) {
-            ext = base.substring(dot);
-            base = base.substring(0, dot);
-        }
-        if (TextUtils.isEmpty(base)) {
-            base = "video";
-        }
-        return new NameParts(base, ext);
-    }
-
-    private static String ensureUniqueName(DocumentFile dir, String base, String ext) {
-        String candidate = base + ext;
-        int n = 1;
-        while (dir.findFile(candidate) != null || dir.findFile(candidate + ".partial") != null) {
-            candidate = base + " (" + n + ")" + ext;
-            n++;
+    private static String ensureUniqueName(DocumentFile directory, String requestedName) {
+        NameParts parts = splitName(requestedName);
+        String candidate = parts.base + parts.extension;
+        int suffix = 1;
+        while (directory.findFile(candidate) != null) {
+            candidate = parts.base + " (" + suffix++ + ")" + parts.extension;
         }
         return candidate;
     }
 
-    private static void deleteQuietly(ContentResolver cr, Uri uri) {
-        if (uri == null) return;
+    private static NameParts splitName(String displayName) {
+        String base = TextUtils.isEmpty(displayName) ? "video" : displayName.trim();
+        String extension = "";
+        int dot = base.lastIndexOf('.');
+        if (dot > 0 && dot < base.length() - 1) {
+            extension = base.substring(dot);
+            base = base.substring(0, dot);
+        }
+        if (TextUtils.isEmpty(base)) base = "video";
+        return new NameParts(base, extension);
+    }
+
+    private static void deleteTemporaryQuietly(ContentResolver resolver, Uri uri) {
         try {
-            DocumentsContract.deleteDocument(cr, uri);
-        } catch (Exception ignore) {
+            if (uri != null) DocumentsContract.deleteDocument(resolver, uri);
+        } catch (Exception ignored) {
+            // The verified target is still safe. Recovery will clean our uniquely named temporary file.
         }
     }
 
-    private static class NameParts {
+    private static void throwIfCanceled(CancelChecker cancelChecker) throws CopyCanceledException {
+        if (cancelChecker != null && cancelChecker.isCanceled()) {
+            throw new CopyCanceledException();
+        }
+    }
+
+    private static String errorText(Exception error) {
+        String text = error.getMessage();
+        return error.getClass().getSimpleName() + (TextUtils.isEmpty(text) ? "" : ": " + text);
+    }
+
+    private static final class NameParts {
         final String base;
-        final String ext;
+        final String extension;
 
-        NameParts(String base, String ext) {
+        NameParts(String base, String extension) {
             this.base = base;
-            this.ext = ext;
+            this.extension = extension;
         }
     }
 
-    private static class CopyCanceledException extends Exception {
+    private static final class CopyCanceledException extends Exception {
     }
 }

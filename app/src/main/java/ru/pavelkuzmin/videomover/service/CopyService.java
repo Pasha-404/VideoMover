@@ -27,7 +27,10 @@ import ru.pavelkuzmin.videomover.MainActivity;
 import ru.pavelkuzmin.videomover.R;
 import ru.pavelkuzmin.videomover.data.MediaQuery;
 import ru.pavelkuzmin.videomover.data.OperationStateStore;
+import ru.pavelkuzmin.videomover.data.SettingsStore;
+import ru.pavelkuzmin.videomover.data.TransferJournal;
 import ru.pavelkuzmin.videomover.domain.FileCopier;
+import ru.pavelkuzmin.videomover.domain.TransferRecovery;
 import ru.pavelkuzmin.videomover.util.StorageUtil;
 
 public class CopyService extends Service {
@@ -56,6 +59,7 @@ public class CopyService extends Service {
     public static final String EXTRA_SPEED_BYTES_PER_SECOND = "extra_speed_bytes_per_second";
     public static final String EXTRA_ERROR_MESSAGE = "extra_error_message";
     public static final String EXTRA_ERROR_REPORT = "extra_error_report";
+    public static final String EXTRA_OPERATION_ID = "extra_operation_id";
 
     public static final int STAGE_SEARCHING = 1;
     public static final int STAGE_CHECKING_SPACE = 2;
@@ -77,6 +81,12 @@ public class CopyService extends Service {
     private Thread workerThread;
     private PowerManager.WakeLock copyWakeLock;
     private volatile boolean cancelRequested;
+    private volatile boolean systemInterrupted;
+    private static volatile boolean workerRunning;
+
+    public static boolean isWorkerRunning() {
+        return workerRunning;
+    }
 
     @Override
     public void onCreate() {
@@ -100,6 +110,7 @@ public class CopyService extends Service {
             return START_NOT_STICKY;
         }
         cancelRequested = false;
+        systemInterrupted = false;
 
         if (Build.VERSION.SDK_INT >= 33) {
             int state = ContextCompat.checkSelfPermission(
@@ -144,6 +155,7 @@ public class CopyService extends Service {
 
         boolean useDcimAll = intent.getBooleanExtra(EXTRA_USE_DCIM_ALL, false);
         String relPrefix = intent.getStringExtra(EXTRA_REL_PREFIX);
+        workerRunning = true;
         workerThread = new Thread(() -> runCopy(startId, destTree, destDir, useDcimAll, relPrefix),
                 "VideoMoverCopy");
         workerThread.start();
@@ -152,7 +164,12 @@ public class CopyService extends Service {
     }
 
     private void requestCancel(int startId) {
+        requestStop(startId, false);
+    }
+
+    private void requestStop(int startId, boolean interruptedBySystem) {
         cancelRequested = true;
+        systemInterrupted = interruptedBySystem;
         Thread thread = workerThread;
         if (thread != null) {
             thread.interrupt();
@@ -191,6 +208,8 @@ public class CopyService extends Service {
                          boolean useDcimAll, String relPrefix) {
         List<MediaQuery.VideoItem> items = new ArrayList<>();
         ArrayList<String> toDelete = new ArrayList<>();
+        TransferJournal journal = TransferJournal.get(this);
+        long operationId = -1L;
         int[] copied = {0};
         int[] fail = {0};
         int[] duplicates = {0};
@@ -203,12 +222,15 @@ public class CopyService extends Service {
         int destinationErrorStreak = 0;
 
         try {
+            TransferRecovery.reconcileInterruptedOperations(this, journal);
+            operationId = journal.beginOperation(destTree, SettingsStore.isDeleteAfter(this));
             sendProgress(STAGE_SEARCHING, 0, 0, copied[0], fail[0], duplicates[0],
                     null, 0, 0, copiedBytes[0], 0, -1, 0, null);
 
             items = useDcimAll
                     ? MediaQuery.findDcimVideosList(this)
                     : MediaQuery.findCameraVideosList(this, relPrefix);
+            journal.addItems(operationId, items);
 
             int total = items.size();
             totalBytes = sumKnownSizes(items);
@@ -250,6 +272,8 @@ public class CopyService extends Service {
                 sendProgress(STAGE_COPYING, doneBeforeCurrent, total, copied[0], fail[0], duplicates[0],
                         item.displayName, 0, item.size, copiedBytes[0], totalBytes, availableBytes, 0, null);
 
+                final int itemIndex = index;
+                final long currentOperationId = operationId;
                 FileCopier.Result result = FileCopier.copyWithSha256(
                         this,
                         item.uri,
@@ -272,9 +296,35 @@ public class CopyService extends Service {
                                         availableBytesForProgress[0], speed, null);
                             }
                         },
-                        this::isCancelRequested);
+                        this::isCancelRequested,
+                        new FileCopier.LifecycleCallback() {
+                            @Override
+                            public void onTemporaryCreated(Uri tempUri) {
+                                journal.markItemCopying(currentOperationId, itemIndex, tempUri);
+                            }
+
+                            @Override
+                            public void onVerificationStarted(String sourceHash, Uri tempUri) {
+                                journal.markItemVerifying(currentOperationId, itemIndex, sourceHash, tempUri);
+                            }
+
+                            @Override
+                            public void onPublishingStarted(String sourceHash, Uri tempUri, String finalName) {
+                                journal.markItemPublishing(currentOperationId, itemIndex, sourceHash, tempUri, finalName);
+                            }
+
+                            @Override
+                            public void onFinalVerified(boolean duplicate, String sourceHash,
+                                                        Uri finalUri, String finalName) {
+                                journal.markItemVerified(currentOperationId, itemIndex, duplicate, sourceHash,
+                                        finalUri, finalName);
+                            }
+                        },
+                        FileCopier.temporaryName(currentOperationId, itemIndex));
 
                 if (result.canceled) {
+                    FileCopier.deleteOwnedTemporary(this, result.tempUri);
+                    journal.markItemCanceled(operationId, itemIndex, result.tempUri);
                     canceled = true;
                     sendProgress(STAGE_STOPPING, doneBeforeCurrent, total, copied[0], fail[0], duplicates[0],
                             item.displayName, result.bytes, item.size, copiedBytes[0],
@@ -287,9 +337,13 @@ public class CopyService extends Service {
                     } else {
                         copied[0]++;
                         copiedBytes[0] += Math.max(0L, result.bytes);
+                    }
+                    if (SettingsStore.isDeleteAfter(this)) {
                         toDelete.add(item.uri.toString());
                     }
                 } else {
+                    journal.markItemFailed(operationId, itemIndex, result.errorCategory,
+                            result.error, result.tempUri);
                     fail[0]++;
                     addErrorReport(errorReport, index, total, item, result);
                     if (result.destinationIssue) {
@@ -374,6 +428,7 @@ public class CopyService extends Service {
             doneIntent.putExtra(EXTRA_COPIED_BYTES, copiedBytes[0]);
             doneIntent.putExtra(EXTRA_TOTAL_BYTES, totalBytes);
             doneIntent.putExtra(EXTRA_AVAILABLE_BYTES, availableBytes);
+            doneIntent.putExtra(EXTRA_OPERATION_ID, operationId);
             if (!TextUtils.isEmpty(fatalError)) {
                 doneIntent.putExtra(EXTRA_ERROR_MESSAGE, fatalError);
             }
@@ -386,11 +441,23 @@ public class CopyService extends Service {
                     total, copied[0], fail[0], duplicates[0], copiedBytes[0],
                     totalBytes, availableBytes, fatalError,
                     terminalStage == STAGE_CANCELED ? new ArrayList<>() : toDelete,
-                    errorReportLines);
+                    errorReportLines, operationId);
             sendBroadcast(doneIntent);
+
+            if (operationId > 0) {
+                if (canceled) {
+                    journal.finishOperation(operationId,
+                            systemInterrupted ? TransferJournal.OP_INTERRUPTED : TransferJournal.OP_CANCELED);
+                } else {
+                    journal.finishOperation(operationId,
+                            TextUtils.isEmpty(fatalError) ? TransferJournal.OP_DONE : TransferJournal.OP_ERROR);
+                }
+            }
 
             releaseCopyWakeLock();
             cancelRequested = false;
+            systemInterrupted = false;
+            workerRunning = false;
             workerThread = null;
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf(startId);
@@ -474,6 +541,9 @@ public class CopyService extends Service {
         }
         if (FileCopier.ERROR_STAGE_VERIFY_SIZE.equals(stage)) {
             return getString(R.string.error_stage_verify_size);
+        }
+        if (FileCopier.ERROR_STAGE_VERIFY_HASH.equals(stage)) {
+            return getString(R.string.error_stage_verify_hash);
         }
         if (FileCopier.ERROR_STAGE_DEST_RENAME.equals(stage)) {
             return getString(R.string.error_stage_dest_rename);
@@ -652,6 +722,12 @@ public class CopyService extends Service {
     public void onDestroy() {
         releaseCopyWakeLock();
         super.onDestroy();
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        // Android 15 can stop a long dataSync service. The durable journal turns this into a safe retry.
+        requestStop(startId, true);
     }
 
     @Nullable

@@ -12,5 +12,18 @@
         <item name="colorOnSurface">@color/vm_text</item>
         <item name="colorOnSurfaceVariant">@color/vm_text_muted</item>
         <item name="colorOutline">@color/vm_outline</item>
+        <!-- Keep PreferenceFragmentCompat readable when the phone uses a light system theme. -->
+        <item name="preferenceTheme">@style/ThemeOverlay.VideoMover.Preference</item>
+    </style>
+
+    <style name="ThemeOverlay.VideoMover.Preference" parent="PreferenceThemeOverlay">
+        <item name="android:textAppearanceListItem">@style/TextAppearance.VideoMover.Preference.Title</item>
+        <item name="android:textColorSecondary">@color/preference_summary</item>
+        <item name="preferenceCategoryTitleTextColor">@color/vm_text_muted</item>
+        <item name="colorAccent">@color/vm_primary</item>
+    </style>
+
+    <style name="TextAppearance.VideoMover.Preference.Title" parent="@android:style/TextAppearance.Material.Subhead">
+        <item name="android:textColor">@color/preference_title</item>
     </style>
 </resources>

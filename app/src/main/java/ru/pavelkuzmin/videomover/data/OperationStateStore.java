@@ -28,6 +28,7 @@ public final class OperationStateStore {
     private static final String KEY_ERROR_MESSAGE = "error_message";
     private static final String KEY_TO_DELETE = "to_delete";
     private static final String KEY_ERROR_REPORT = "error_report";
+    private static final String KEY_OPERATION_ID = "operation_id";
 
     private OperationStateStore() {}
 
@@ -69,7 +70,7 @@ public final class OperationStateStore {
                                     long totalBytes, long availableBytes,
                                     String errorMessage, List<String> toDelete) {
         saveFinished(context, stage, total, copied, fail, duplicates, copiedBytes,
-                totalBytes, availableBytes, errorMessage, toDelete, new ArrayList<>());
+                totalBytes, availableBytes, errorMessage, toDelete, new ArrayList<>(), 0L);
     }
 
     public static void saveFinished(Context context, int stage, int total, int copied,
@@ -77,6 +78,15 @@ public final class OperationStateStore {
                                     long totalBytes, long availableBytes,
                                     String errorMessage, List<String> toDelete,
                                     List<String> errorReport) {
+        saveFinished(context, stage, total, copied, fail, duplicates, copiedBytes, totalBytes,
+                availableBytes, errorMessage, toDelete, errorReport, 0L);
+    }
+
+    public static void saveFinished(Context context, int stage, int total, int copied,
+                                    int fail, int duplicates, long copiedBytes,
+                                    long totalBytes, long availableBytes,
+                                    String errorMessage, List<String> toDelete,
+                                    List<String> errorReport, long operationId) {
         prefs(context).edit()
                 .putBoolean(KEY_HAS_STATE, true)
                 .putBoolean(KEY_RESULT_HANDLED, false)
@@ -97,6 +107,7 @@ public final class OperationStateStore {
                 .putString(KEY_ERROR_MESSAGE, errorMessage)
                 .putString(KEY_TO_DELETE, joinLines(toDelete))
                 .putString(KEY_ERROR_REPORT, joinLines(errorReport))
+                .putLong(KEY_OPERATION_ID, operationId)
                 .apply();
     }
 
@@ -135,7 +146,8 @@ public final class OperationStateStore {
                 prefs.getLong(KEY_SPEED_BYTES_PER_SECOND, 0L),
                 prefs.getString(KEY_ERROR_MESSAGE, null),
                 splitLines(prefs.getString(KEY_TO_DELETE, "")),
-                splitLines(prefs.getString(KEY_ERROR_REPORT, "")));
+                splitLines(prefs.getString(KEY_ERROR_REPORT, "")),
+                prefs.getLong(KEY_OPERATION_ID, 0L));
     }
 
     private static SharedPreferences prefs(Context context) {
@@ -192,13 +204,14 @@ public final class OperationStateStore {
         public final String errorMessage;
         public final ArrayList<String> toDelete;
         public final ArrayList<String> errorReport;
+        public final long operationId;
 
         private Snapshot(boolean resultHandled, boolean deleteRequested, int stage,
                          int done, int total, int copied, int fail, int duplicates,
                          String currentName, long currentBytes, long currentTotalBytes,
                          long copiedBytes, long totalBytes, long availableBytes,
                          long speedBytesPerSecond, String errorMessage,
-                         ArrayList<String> toDelete, ArrayList<String> errorReport) {
+                         ArrayList<String> toDelete, ArrayList<String> errorReport, long operationId) {
             this.resultHandled = resultHandled;
             this.deleteRequested = deleteRequested;
             this.stage = stage;
@@ -217,6 +230,7 @@ public final class OperationStateStore {
             this.errorMessage = errorMessage;
             this.toDelete = toDelete;
             this.errorReport = errorReport;
+            this.operationId = operationId;
         }
     }
 }

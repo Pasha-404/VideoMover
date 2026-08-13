@@ -1,6 +1,8 @@
 package ru.pavelkuzmin.videomover;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -32,8 +34,10 @@ import java.util.Locale;
 
 import ru.pavelkuzmin.videomover.data.OperationStateStore;
 import ru.pavelkuzmin.videomover.data.SettingsStore;
+import ru.pavelkuzmin.videomover.data.TransferJournal;
 import ru.pavelkuzmin.videomover.databinding.ActivityMainBinding;
 import ru.pavelkuzmin.videomover.service.CopyService;
+import ru.pavelkuzmin.videomover.domain.FileCopier;
 import ru.pavelkuzmin.videomover.util.SafUtil;
 import ru.pavelkuzmin.videomover.util.StorageUtil;
 import ru.pavelkuzmin.videomover.util.VideoPermissionUtil;
@@ -49,6 +53,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean copyRunning;
     private boolean stopRequested;
     private String pendingDeleteResultText;
+    private long pendingDeleteOperationId;
+    private ArrayList<Uri> pendingDeleteUris = new ArrayList<>();
     private final ArrayList<String> lastErrorReport = new ArrayList<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Runnable destinationRecheckRunnable = this::runDestinationRecheck;
@@ -86,12 +92,14 @@ public class MainActivity extends AppCompatActivity {
             });
 
     private final ActivityResultLauncher<IntentSenderRequest> deleteLauncher =
-            registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
+        registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK) {
+                    finishJournalDeletion(true);
                     markProcessFinished(getString(R.string.process_delete_done, pendingDeleteResultText), false);
                     updateErrorDetailsVisibility();
                     Toast.makeText(this, getString(R.string.deleting_done), Toast.LENGTH_LONG).show();
                 } else {
+                    finishJournalDeletion(false);
                     markProcessFinished(getString(R.string.process_delete_canceled, pendingDeleteResultText), true);
                     updateErrorDetailsVisibility();
                     Toast.makeText(this, getString(R.string.deleting_canceled), Toast.LENGTH_LONG).show();
@@ -187,7 +195,20 @@ public class MainActivity extends AppCompatActivity {
         if (isTerminalStage(snapshot.stage)) {
             handleCopyFinished(snapshot.stage, snapshot.copied, snapshot.total, snapshot.fail,
                     snapshot.duplicates, snapshot.copiedBytes, snapshot.errorMessage,
-                    snapshot.toDelete, snapshot.errorReport, false, snapshot.deleteRequested);
+                    snapshot.toDelete, snapshot.errorReport, false, snapshot.deleteRequested,
+                    snapshot.operationId);
+            return true;
+        }
+
+        if (!CopyService.isWorkerRunning()) {
+            // A service/process can disappear without a lifecycle callback. Do not show a fake active transfer.
+            OperationStateStore.clear(this);
+            copyRunning = false;
+            stopRequested = false;
+            binding.btnSettings.setEnabled(true);
+            setTransferButtonIdle(isDestinationWritable(SettingsStore.getDestTreeUri(this)) && isSourceModeReady());
+            setIdleProcess(getString(R.string.process_recovery_title),
+                    getString(R.string.process_recovery_detail));
             return true;
         }
 
@@ -215,6 +236,7 @@ public class MainActivity extends AppCompatActivity {
         int fail = intent.getIntExtra(CopyService.EXTRA_FAIL, 0);
         int duplicates = intent.getIntExtra(CopyService.EXTRA_DUPLICATES, 0);
         long copiedBytes = intent.getLongExtra(CopyService.EXTRA_COPIED_BYTES, 0L);
+        long operationId = intent.getLongExtra(CopyService.EXTRA_OPERATION_ID, 0L);
         String error = intent.getStringExtra(CopyService.EXTRA_ERROR_MESSAGE);
         ArrayList<String> toDeleteStr = intent.getStringArrayListExtra(CopyService.EXTRA_TO_DELETE);
         ArrayList<String> errorReport = intent.getStringArrayListExtra(CopyService.EXTRA_ERROR_REPORT);
@@ -222,14 +244,15 @@ public class MainActivity extends AppCompatActivity {
         handleCopyFinished(stage, copied, total, fail, duplicates, copiedBytes, error,
                 toDeleteStr == null ? new ArrayList<>() : toDeleteStr,
                 errorReport == null ? new ArrayList<>() : errorReport,
-                showToast, false);
+                showToast, false, operationId);
     }
 
     private void handleCopyFinished(int stage, int copied, int total, int fail, int duplicates,
                                     long copiedBytes, @Nullable String error,
-                                    ArrayList<String> toDeleteStr, ArrayList<String> errorReport,
-                                    boolean showToast,
-                                    boolean deleteAlreadyRequested) {
+                                     ArrayList<String> toDeleteStr, ArrayList<String> errorReport,
+                                     boolean showToast,
+                                     boolean deleteAlreadyRequested,
+                                     long operationId) {
         stopRequested = false;
         ArrayList<Uri> toDelete = parseDeleteUris(toDeleteStr);
         setErrorReport(errorReport);
@@ -263,7 +286,10 @@ public class MainActivity extends AppCompatActivity {
             setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
                     PROGRESS_MAX, false, false);
             if (!deleteAlreadyRequested) {
-                requestDeleteOriginals(toDelete);
+                requestDeleteOriginals(operationId, toDelete);
+            } else if (operationId > 0) {
+                pendingDeleteOperationId = operationId;
+                pendingDeleteUris = TransferJournal.get(this).getPendingDeletionUris(operationId);
             }
             return;
         }
@@ -307,6 +333,14 @@ public class MainActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.error_report_title)
                 .setMessage(message)
+                .setNeutralButton(R.string.error_report_copy, (dialog, which) -> {
+                    ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText(
+                                getString(R.string.error_report_title), message));
+                        Toast.makeText(this, R.string.error_report_copied, Toast.LENGTH_SHORT).show();
+                    }
+                })
                 .setPositiveButton(android.R.string.ok, null)
                 .show();
     }
@@ -569,6 +603,15 @@ public class MainActivity extends AppCompatActivity {
         if (stopRequested) {
             return;
         }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.stop_transfer_title)
+                .setMessage(R.string.stop_transfer_message)
+                .setNegativeButton(R.string.stop_transfer_keep, null)
+                .setPositiveButton(R.string.stop_transfer_confirm, (dialog, which) -> confirmStopTransfer())
+                .show();
+    }
+
+    private void confirmStopTransfer() {
         stopRequested = true;
         setTransferButtonRunning(true);
         setProcessStage(getString(R.string.stage_stopping), getString(R.string.process_stopping_detail),
@@ -740,15 +783,54 @@ public class MainActivity extends AppCompatActivity {
         refreshMainInfo(false);
     }
 
-    private void requestDeleteOriginals(ArrayList<Uri> toDelete) {
+    private void requestDeleteOriginals(long operationId, ArrayList<Uri> toDelete) {
+        if (operationId <= 0) {
+            launchDeleteRequest(operationId, toDelete);
+            return;
+        }
+
+        // Hash the originals immediately before the destructive system request, off the UI thread.
+        setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_verifying_detail),
+                PROGRESS_MAX, false, false);
+        new Thread(() -> {
+            ArrayList<Uri> verified = new ArrayList<>();
+            for (TransferJournal.DeleteCandidate candidate
+                    : TransferJournal.get(this).getDeleteCandidates(operationId)) {
+                try {
+                    if (candidate.sourceHash.equals(FileCopier.sha256Of(this, candidate.sourceUri))) {
+                        verified.add(candidate.sourceUri);
+                    }
+                } catch (Exception ignored) {
+                    // A missing or changed source is intentionally retained.
+                }
+            }
+            runOnUiThread(() -> {
+                if (verified.isEmpty()) {
+                    markProcessFinished(getString(R.string.process_delete_nothing_safe, pendingDeleteResultText), true);
+                    return;
+                }
+                launchDeleteRequest(operationId, verified);
+            });
+        }, "VideoMoverDeleteVerification").start();
+    }
+
+    private void launchDeleteRequest(long operationId, ArrayList<Uri> toDelete) {
+        pendingDeleteOperationId = operationId;
+        pendingDeleteUris = new ArrayList<>(toDelete);
+        setProcessStage(getString(R.string.stage_deleting), getString(R.string.process_delete_request_detail),
+                PROGRESS_MAX, false, false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 IntentSender sender = MediaStore
                         .createDeleteRequest(getContentResolver(), toDelete)
                         .getIntentSender();
                 OperationStateStore.markDeleteRequestStarted(this);
+                if (operationId > 0) {
+                    TransferJournal.get(this).markItemsForDeletion(operationId, toDelete);
+                }
                 deleteLauncher.launch(new IntentSenderRequest.Builder(sender).build());
             } catch (Exception e) {
+                finishJournalDeletion(false);
                 markProcessFinished(getString(R.string.toast_delete_request_failed, e.getMessage()), true);
             }
             return;
@@ -760,9 +842,18 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignore) {
             }
         }
+        finishJournalDeletion(true);
         markProcessFinished(getString(R.string.process_delete_done, pendingDeleteResultText), false);
         Toast.makeText(this, getString(R.string.deleting_done), Toast.LENGTH_SHORT).show();
         pendingDeleteResultText = null;
+    }
+
+    private void finishJournalDeletion(boolean deleted) {
+        if (pendingDeleteOperationId > 0 && !pendingDeleteUris.isEmpty()) {
+            TransferJournal.get(this).finishDeletion(pendingDeleteOperationId, pendingDeleteUris, deleted);
+        }
+        pendingDeleteOperationId = 0L;
+        pendingDeleteUris.clear();
     }
 
     private void showEjectInstruction() {

@@ -10,6 +10,8 @@
     <color name="vm_on_primary">#FFFFFF</color>
     <color name="vm_text">#F7FAFF</color>
     <color name="vm_text_muted">#A8B2CC</color>
+    <color name="vm_text_disabled">#68738C</color>
+    <color name="vm_text_muted_disabled">#59637A</color>
     <color name="vm_success">#72E39B</color>
     <color name="vm_success_bg">#183523</color>
     <color name="vm_warning">#FFD166</color>
